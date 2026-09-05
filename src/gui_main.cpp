@@ -44,7 +44,6 @@ constexpr UINT exitFullscreenMessage = WM_APP + 5;
 constexpr UINT thumbnailReadyMessage = WM_APP + 6;
 constexpr UINT clearEditorFocusMessage = WM_APP + 7;
 constexpr UINT togglePlaybackMessage = WM_APP + 8;
-constexpr UINT_PTR videoClickTimerId = 1;
 constexpr int saveHotkeyId = 1;
 constexpr int stopHotkeyId = 2;
 constexpr float windowWidth = 1120.0F;
@@ -311,12 +310,7 @@ LRESULT CALLBACK videoWindowProcedure(
         if (RemovePropW(window, L"NexPlaySuppressSingleClick") != nullptr) {
             return 0;
         }
-        SetTimer(window, videoClickTimerId, GetDoubleClickTime(), nullptr);
-        return 0;
-    }
-    if (message == WM_TIMER && wParam == videoClickTimerId) {
-        KillTimer(window, videoClickTimerId);
-        if (owner != nullptr) PostMessageW(owner, togglePlaybackMessage, 0, 0);
+        PostMessageW(owner, togglePlaybackMessage, 0, 0);
         return 0;
     }
     if (message == WM_KEYDOWN && wParam == VK_ESCAPE) {
@@ -324,13 +318,14 @@ LRESULT CALLBACK videoWindowProcedure(
         return 0;
     }
     if (message == WM_LBUTTONDBLCLK) {
-        KillTimer(window, videoClickTimerId);
         SetPropW(window, L"NexPlaySuppressSingleClick", reinterpret_cast<HANDLE>(1));
-        if (owner != nullptr) PostMessageW(owner, exitFullscreenMessage, 1, 0);
+        if (owner != nullptr) {
+            PostMessageW(owner, togglePlaybackMessage, 0, 0);
+            PostMessageW(owner, exitFullscreenMessage, 1, 0);
+        }
         return 0;
     }
     if (message == WM_NCDESTROY) {
-        KillTimer(window, videoClickTimerId);
         RemovePropW(window, L"NexPlaySuppressSingleClick");
     }
     if (message == WM_ERASEBKGND) {
