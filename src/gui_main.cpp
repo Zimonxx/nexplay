@@ -3894,7 +3894,8 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
         setStatus(window, state, L"NexPlay działa w zasobniku systemowym");
         return;
     case HitTarget::maximize:
-        ShowWindow(window, IsZoomed(window) ? SW_RESTORE : SW_MAXIMIZE);
+        SendMessageW(window, WM_SYSCOMMAND,
+                     IsZoomed(window) ? SC_RESTORE : SC_MAXIMIZE, 0);
         InvalidateRect(window, nullptr, FALSE);
         return;
     case HitTarget::replayPage:
@@ -4161,6 +4162,22 @@ LRESULT CALLBACK windowProcedure(
         if (standard != HTCLIENT) return standard;
         POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ScreenToClient(window, &point);
+        if (!IsZoomed(window)) {
+            RECT client{};
+            GetClientRect(window, &client);
+            const int edge = GetSystemMetrics(SM_CXSIZEFRAME) +
+                GetSystemMetrics(SM_CXPADDEDBORDER);
+            const bool left = point.x < edge, right = point.x >= client.right - edge;
+            const bool top = point.y < edge, bottom = point.y >= client.bottom - edge;
+            if (top && left) return HTTOPLEFT;
+            if (top && right) return HTTOPRIGHT;
+            if (bottom && left) return HTBOTTOMLEFT;
+            if (bottom && right) return HTBOTTOMRIGHT;
+            if (left) return HTLEFT;
+            if (right) return HTRIGHT;
+            if (top) return HTTOP;
+            if (bottom) return HTBOTTOM;
+        }
         const auto logical = designPoint(
             window, static_cast<float>(point.x), static_cast<float>(point.y));
         if (logical.y < 64 &&
@@ -4653,10 +4670,13 @@ LRESULT CALLBACK windowProcedure(
                 limits->ptMaxPosition.y = workArea.top - monitorArea.top;
                 limits->ptMaxSize.x = workArea.right - workArea.left;
                 limits->ptMaxSize.y = workArea.bottom - workArea.top;
-                limits->ptMaxTrackSize = limits->ptMaxSize;
             }
         }
         return 0;
+    case WM_NCCALCSIZE:
+        // Keep WS_CAPTION for DWM transitions; draw our own client-side titlebar.
+        if (wParam != FALSE) return 0;
+        break;
     case WM_DESTROY:
         if (state != nullptr) {
             saveAccentColor(*state);
@@ -4729,7 +4749,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
 
     AppState state;
     constexpr DWORD mainWindowStyle =
-        WS_POPUP | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
+        WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
     constexpr DWORD mainWindowExStyle = WS_EX_APPWINDOW;
     RECT initialArea{0, 0, static_cast<LONG>(windowWidth), static_cast<LONG>(windowHeight)};
     AdjustWindowRectEx(&initialArea, mainWindowStyle, FALSE, mainWindowExStyle);
