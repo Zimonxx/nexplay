@@ -90,7 +90,6 @@ enum class HitTarget {
     editorSave,
     editorName,
     editorFullscreen,
-    editorAudioView,
     editorMergeAudio,
     editorCutMode,
     settingsPage,
@@ -142,14 +141,13 @@ constexpr Rect resolutionFieldRect{478, 405, 680, 455};
 constexpr Rect fpsFieldRect{694, 405, 824, 455};
 constexpr Rect bitrateFieldRect{838, 405, 1036, 455};
 constexpr Rect editorBackRect{260, 91, 344, 129};
-constexpr Rect editorPlayRect{284, 721, 334, 761};
-constexpr Rect editorFullscreenRect{346, 721, 396, 761};
-constexpr Rect editorAudioViewRect{870, 91, 1036, 129};
-constexpr Rect editorMergeAudioRect{814, 168, 1018, 198};
-constexpr Rect editorCutModeRect{670, 648, 834, 676};
-constexpr Rect editorSaveRect{846, 721, 1036, 761};
-constexpr Rect editorNameRect{284, 604, 654, 648};
-constexpr Rect editorTimelineRect{284, 682, 1036, 700};
+constexpr Rect editorPlayRect{284, 724, 334, 764};
+constexpr Rect editorFullscreenRect{346, 724, 396, 764};
+constexpr Rect editorMergeAudioRect{812, 466, 1036, 502};
+constexpr Rect editorCutModeRect{414, 724, 590, 764};
+constexpr Rect editorSaveRect{846, 724, 1036, 764};
+constexpr Rect editorNameRect{284, 466, 654, 506};
+constexpr Rect editorTimelineRect{470, 536, 1030, 568};
 constexpr Rect autostartRect{280, 210, 1040, 264};
 constexpr Rect autoBufferRect{280, 270, 1040, 324};
 constexpr Rect saveHotkeyRect{280, 410, 650, 466};
@@ -284,7 +282,6 @@ struct AppState final {
     std::vector<EditorAudioTrack> editorAudioTracks;
     int editorAudioScroll{};
     int activeEditorAudioTrack{-1};
-    bool editorAudioView{};
     bool mergeEditorAudio{};
     bool cutEditorSelection{};
     DragHandle dragHandle{DragHandle::none};
@@ -2018,16 +2015,11 @@ void drawEditorName(AppState& state) {
 }
 
 [[nodiscard]] Rect editorAudioTimelineRect(const int visibleRow) {
-    const float top = 216.0F + static_cast<float>(visibleRow) * 64.0F;
-    return {520, top + 31, 1014, top + 43};
+    const float top = 578.0F + static_cast<float>(visibleRow) * 44.0F;
+    return {editorTimelineRect.left, top + 5, editorTimelineRect.right, top + 37};
 }
 
-void drawEditorAudioPanel(AppState& state) {
-    drawText(state, L"Mikser ścieżek", {300, 171, 540, 200},
-             state.headingFormat.Get(), white);
-    drawText(state, L"Wycisz ścieżkę lub ustaw fragment, w którym ma być słyszalna.",
-             {300, 197, 730, 216}, state.smallFormat.Get(), muted);
-
+void drawEditorMergeToggle(AppState& state) {
     const float mergeHover = hoverValue(state, HitTarget::editorMergeAudio);
     D2D1_COLOR_F mergeFill = field;
     mergeFill.r += primary.r * mergeHover * 0.05F;
@@ -2044,8 +2036,98 @@ void drawEditorAudioPanel(AppState& state) {
                {editorMergeAudioRect.right - 48, editorMergeAudioRect.top + 5,
                 editorMergeAudioRect.right - 10, editorMergeAudioRect.bottom - 5},
                state.mergeEditorAudio ? 1.0F : 0.0F);
+}
 
-    constexpr int visibleTracks = 5;
+void drawTimelineRuler(AppState& state) {
+    constexpr float rulerTop = 516.0F;
+    state.brush->SetColor(D2D1_COLOR_F{0.20F, 0.20F, 0.26F, 1.0F});
+    state.renderTarget->DrawLine(
+        D2D1::Point2F(editorTimelineRect.left, rulerTop + 13),
+        D2D1::Point2F(editorTimelineRect.right, rulerTop + 13), state.brush.Get());
+    constexpr int divisions = 10;
+    for (int tick = 0; tick <= divisions; ++tick) {
+        const float fraction = static_cast<float>(tick) / divisions;
+        const float x = editorTimelineRect.left +
+            fraction * (editorTimelineRect.right - editorTimelineRect.left);
+        const bool major = tick % 2 == 0;
+        state.brush->SetColor(major ? muted : border);
+        state.renderTarget->DrawLine(
+            D2D1::Point2F(x, rulerTop + (major ? 5.0F : 9.0F)),
+            D2D1::Point2F(x, rulerTop + 15.0F), state.brush.Get());
+        if (major) {
+            drawCenteredText(
+                state, timeLabel(state.editorDuration * fraction),
+                {x - 28, rulerTop - 9, x + 28, rulerTop + 7},
+                state.smallFormat.Get(), muted);
+        }
+    }
+}
+
+void drawVideoTimelineTrack(AppState& state) {
+    const double duration = std::max(0.001, state.editorDuration);
+    const float width = editorTimelineRect.right - editorTimelineRect.left;
+    const float startX = editorTimelineRect.left +
+        static_cast<float>(state.trimStart / duration) * width;
+    const float endX = editorTimelineRect.left +
+        static_cast<float>(state.trimEnd / duration) * width;
+
+    fillRounded(state, {284, 536, 462, 568}, 6,
+                D2D1_COLOR_F{0.039F, 0.040F, 0.057F, 1.0F});
+    drawText(state, L"V1", {296, 544, 322, 565}, state.smallFormat.Get(), primaryHover);
+    drawText(state, L"Wideo", {332, 542, 452, 565}, state.bodyFormat.Get(), white);
+    fillRounded(state, editorTimelineRect, 5,
+                D2D1_COLOR_F{0.055F, 0.057F, 0.078F, 1.0F});
+
+    if (state.cutEditorSelection) {
+        D2D1_COLOR_F retained = primary;
+        retained.a = 0.34F;
+        fillRounded(state, editorTimelineRect, 5, retained);
+        drawGlow(state, {startX, editorTimelineRect.top, endX, editorTimelineRect.bottom},
+                 5, red, 0.30F);
+        fillRounded(state,
+                    {startX, editorTimelineRect.top, endX, editorTimelineRect.bottom},
+                    5, D2D1_COLOR_F{red.r, red.g, red.b, 0.82F});
+    } else {
+        drawGlow(state, {startX, editorTimelineRect.top, endX, editorTimelineRect.bottom},
+                 5, primary, 0.26F);
+        fillRounded(state,
+                    {startX, editorTimelineRect.top, endX, editorTimelineRect.bottom},
+                    5, D2D1_COLOR_F{primary.r, primary.g, primary.b, 0.72F});
+    }
+
+    state.brush->SetColor(white);
+    state.renderTarget->FillEllipse(D2D1::Ellipse(
+        D2D1::Point2F(startX, (editorTimelineRect.top + editorTimelineRect.bottom) * 0.5F),
+        6, 6), state.brush.Get());
+    state.renderTarget->FillEllipse(D2D1::Ellipse(
+        D2D1::Point2F(endX, (editorTimelineRect.top + editorTimelineRect.bottom) * 0.5F),
+        6, 6), state.brush.Get());
+}
+
+void drawAudioWaveform(
+    AppState& state, const Rect timeline, const float startX, const float endX,
+    const int trackIndex, const bool included) {
+    if (endX <= startX) return;
+    D2D1_COLOR_F waveform = included ? primaryHover : muted;
+    waveform.a = included ? 0.85F : 0.28F;
+    state.brush->SetColor(waveform);
+    const float center = (timeline.top + timeline.bottom) * 0.5F;
+    const float maximum = (timeline.bottom - timeline.top) * 0.38F;
+    for (float x = startX + 4.0F; x < endX - 3.0F; x += 6.0F) {
+        const float sample = 0.22F + 0.78F * std::abs(std::sin(
+            x * 0.071F + static_cast<float>(trackIndex) * 1.91F));
+        const float amplitude = maximum * sample;
+        state.renderTarget->DrawLine(
+            D2D1::Point2F(x, center - amplitude),
+            D2D1::Point2F(x, center + amplitude), state.brush.Get(), 1.0F);
+    }
+}
+
+void drawUnifiedTimeline(AppState& state) {
+    drawTimelineRuler(state);
+    drawVideoTimelineTrack(state);
+
+    constexpr int visibleTracks = 3;
     state.editorAudioScroll = std::clamp(
         state.editorAudioScroll, 0,
         std::max(0, static_cast<int>(state.editorAudioTracks.size()) - visibleTracks));
@@ -2053,123 +2135,106 @@ void drawEditorAudioPanel(AppState& state) {
         const int index = state.editorAudioScroll + visible;
         if (index >= static_cast<int>(state.editorAudioTracks.size())) break;
         const auto& track = state.editorAudioTracks[static_cast<std::size_t>(index)];
-        const float top = 216.0F + static_cast<float>(visible) * 64.0F;
-        const Rect row{292, top, 1026, top + 56};
+        const float top = 578.0F + static_cast<float>(visible) * 44.0F;
+        const Rect label{284, top, 462, top + 40};
+        const Rect timeline = editorAudioTimelineRect(visible);
+        const Rect row{284, top, editorTimelineRect.right, top + 40};
         const bool hovered = state.mouseX >= row.left && state.mouseX <= row.right &&
             state.mouseY >= row.top && state.mouseY <= row.bottom;
-        fillRounded(state, row, 9,
-                    hovered ? D2D1_COLOR_F{0.052F, 0.046F, 0.086F, 1}
-                            : D2D1_COLOR_F{0.032F, 0.033F, 0.047F, 1});
-        strokeRounded(state, row, 9, hovered ? D2D1_COLOR_F{primary.r, primary.g,
-                                                             primary.b, 0.25F}
-                                               : border);
-        drawCheckbox(state, {304, top + 10, 324, top + 30}, track.included);
-        drawText(state, track.name, {338, top + 9, 760, top + 31},
-                 state.bodyFormat.Get(), track.included ? white : muted);
-        drawText(state, track.included ? L"AKTYWNA" : L"WYCISZONA",
-                 {888, top + 10, 1008, top + 30}, state.smallFormat.Get(),
-                 track.included ? green : red);
+        fillRounded(state, label, 6,
+                    hovered ? D2D1_COLOR_F{0.052F, 0.046F, 0.086F, 1.0F}
+                            : D2D1_COLOR_F{0.039F, 0.040F, 0.057F, 1.0F});
+        drawCheckbox(state, {294, top + 10, 314, top + 30}, track.included);
+        drawText(state, L"A" + std::to_wstring(index + 1),
+                 {322, top + 5, 350, top + 23}, state.smallFormat.Get(),
+                 track.included ? primaryHover : muted);
+        drawText(state, track.name, {354, top + 4, 454, top + 23},
+                 state.smallFormat.Get(), track.included ? white : muted);
+        drawText(state,
+                 preciseTimeLabel(track.start) + L" – " + preciseTimeLabel(track.end),
+                 {322, top + 22, 456, top + 39}, state.smallFormat.Get(), muted);
 
-        const Rect timeline = editorAudioTimelineRect(visible);
+        fillRounded(state, timeline, 4,
+                    D2D1_COLOR_F{0.050F, 0.052F, 0.071F, 1.0F});
         const double duration = std::max(0.001, state.editorDuration);
         const float startX = timeline.left +
             static_cast<float>(track.start / duration) * (timeline.right - timeline.left);
         const float endX = timeline.left +
             static_cast<float>(track.end / duration) * (timeline.right - timeline.left);
-        fillRounded(state, timeline, 5, border);
         if (track.included) {
             D2D1_COLOR_F range = primary;
-            range.a = 0.78F;
-            fillRounded(state, {startX, timeline.top, endX, timeline.bottom}, 5, range);
+            range.a = hovered ? 0.30F : 0.22F;
+            fillRounded(state, {startX, timeline.top, endX, timeline.bottom}, 4, range);
+        }
+        drawAudioWaveform(state, timeline, startX, endX, index, track.included);
+        if (track.included) {
             state.brush->SetColor(white);
             state.renderTarget->FillEllipse(
                 D2D1::Ellipse(D2D1::Point2F(startX, (timeline.top + timeline.bottom) * 0.5F),
-                              6, 6), state.brush.Get());
+                              5, 5), state.brush.Get());
             state.renderTarget->FillEllipse(
                 D2D1::Ellipse(D2D1::Point2F(endX, (timeline.top + timeline.bottom) * 0.5F),
-                              6, 6), state.brush.Get());
+                              5, 5), state.brush.Get());
         }
-        drawText(state, preciseTimeLabel(track.start),
-                 {338, top + 35, 430, top + 54}, state.smallFormat.Get(), muted);
-        drawText(state, preciseTimeLabel(track.end),
-                 {430, top + 35, 516, top + 54}, state.smallFormat.Get(), muted);
     }
+
     if (state.editorAudioTracks.empty()) {
-        drawCenteredText(state, L"Ten klip nie zawiera ścieżek audio.",
-                         {320, 320, 1000, 370}, state.bodyFormat.Get(), muted);
+        drawText(state, L"Brak ścieżek audio", {284, 584, 456, 612},
+                 state.bodyFormat.Get(), muted);
+    } else if (state.editorAudioTracks.size() > visibleTracks) {
+        const float trackHeight = 132.0F * visibleTracks /
+            static_cast<float>(state.editorAudioTracks.size());
+        const float travel = 132.0F - trackHeight;
+        const int maximumScroll =
+            static_cast<int>(state.editorAudioTracks.size()) - visibleTracks;
+        const float top = 578.0F + travel * state.editorAudioScroll /
+            static_cast<float>(maximumScroll);
+        fillRounded(state, {1038, 578, 1043, 710}, 2.5F, border);
+        fillRounded(state, {1038, top, 1043, top + trackHeight}, 2.5F, primary);
     }
+
+    const double duration = std::max(0.001, state.editorDuration);
+    const float playX = editorTimelineRect.left +
+        static_cast<float>(state.playPosition / duration) *
+            (editorTimelineRect.right - editorTimelineRect.left);
+    state.brush->SetColor(accentSecondary);
+    state.renderTarget->DrawLine(
+        D2D1::Point2F(playX, 516), D2D1::Point2F(playX, 710),
+        state.brush.Get(), 1.5F);
+    state.renderTarget->FillEllipse(
+        D2D1::Ellipse(D2D1::Point2F(playX, 518), 4.5F, 4.5F), state.brush.Get());
 }
 
 void drawEditorPage(AppState& state) {
     drawButton(state, editorBackRect, L"←  Wróć", HitTarget::editorBack, false);
-    drawButton(state, editorAudioViewRect,
-               state.editorAudioView ? L"Podgląd wideo" : L"Mikser audio",
-               HitTarget::editorAudioView, false);
     drawText(state, L"Edytor klipu", {366, 88, 650, 128}, state.titleFormat.Get(), white);
-    drawText(state, L"Przytnij materiał i zapisz nową wersję bez naruszania oryginału.",
-             {366, 126, 850, 150}, state.bodyFormat.Get(), muted);
+    drawText(state, L"Podgląd i wszystkie ścieżki pracują na jednej osi czasu.",
+             {366, 126, 920, 150}, state.bodyFormat.Get(), muted);
 
-    drawGlow(state, {276, 151, 1044, 574}, 16, primary, 0.16F);
-    fillRounded(state, {276, 151, 1044, 574}, 16, card);
-    strokeRounded(state, {276, 151, 1044, 574}, 16, border);
-    if (state.editorAudioView) drawEditorAudioPanel(state);
+    drawGlow(state, {276, 151, 1044, 428}, 16, primary, 0.16F);
+    fillRounded(state, {276, 151, 1044, 428}, 16, card);
+    strokeRounded(state, {276, 151, 1044, 428}, 16, border);
 
-    fillRounded(state, {260, 586, 1060, 778}, 16, card);
-    strokeRounded(state, {260, 586, 1060, 778}, 16,
+    fillRounded(state, {260, 440, 1060, 778}, 16, card);
+    strokeRounded(state, {260, 440, 1060, 778}, 16,
                   D2D1_COLOR_F{0.080F, 0.082F, 0.115F, 1});
-    drawText(state, L"NAZWA NOWEGO PLIKU", {284, 580, 650, 604}, state.smallFormat.Get(), muted);
+    drawText(state, L"NAZWA NOWEGO PLIKU", {284, 447, 654, 466},
+             state.smallFormat.Get(), muted);
     drawEditorName(state);
-    drawText(state, L".mp4", {664, 617, 714, 644}, state.bodyFormat.Get(), muted);
-    drawText(state, L"Wszystkie ścieżki audio zostaną zachowane.",
-             {730, 617, 1036, 642}, state.smallFormat.Get(), muted);
-    drawText(state,
-             state.cutEditorSelection
-                 ? L"Czerwony zakres zostanie usunięty, a reszta połączona."
-                 : L"Kliknij pasek, aby przewinąć  •  białe uchwyty przycinają brzegi",
-             {284, 653, 660, 675}, state.smallFormat.Get(), muted);
-    drawButton(state, editorCutModeRect,
-               state.cutEditorSelection ? L"Wycinanie: WŁ." : L"Wytnij fragment",
-               HitTarget::editorCutMode, false, state.editorDuration > 0.2);
-
-    const double duration = std::max(0.001, state.editorDuration);
-    const float startX = editorTimelineRect.left +
-        static_cast<float>(state.trimStart / duration) *
-        (editorTimelineRect.right - editorTimelineRect.left);
-    const float endX = editorTimelineRect.left +
-        static_cast<float>(state.trimEnd / duration) *
-        (editorTimelineRect.right - editorTimelineRect.left);
-    const float playX = editorTimelineRect.left +
-        static_cast<float>(state.playPosition / duration) *
-        (editorTimelineRect.right - editorTimelineRect.left);
-
-    fillRounded(state, {editorTimelineRect.left, 682, editorTimelineRect.right, 690}, 4, border);
-    if (state.cutEditorSelection) {
-        D2D1_COLOR_F retained = primary;
-        retained.a = 0.38F;
-        fillRounded(state, {editorTimelineRect.left, 681,
-                            editorTimelineRect.right, 691}, 5, retained);
-        drawGlow(state, {startX, 681, endX, 691}, 5, red, 0.34F);
-        fillRounded(state, {startX, 681, endX, 691}, 5, red);
-    } else {
-        drawGlow(state, {startX, 681, endX, 691}, 5, primary, 0.30F);
-        fillRounded(state, {startX, 681, endX, 691}, 5, primary);
-    }
-    state.brush->SetColor(accentSecondary);
-    state.renderTarget->DrawLine(
-        D2D1::Point2F(playX, 673), D2D1::Point2F(playX, 703), state.brush.Get(), 1.5F);
-    state.brush->SetColor(white);
-    state.renderTarget->FillEllipse(D2D1::Ellipse(D2D1::Point2F(startX, 686), 7, 7), state.brush.Get());
-    state.renderTarget->FillEllipse(D2D1::Ellipse(D2D1::Point2F(endX, 686), 7, 7), state.brush.Get());
-    drawText(state, timeLabel(state.trimStart), {284, 702, 350, 722}, state.smallFormat.Get(), muted);
-    drawText(state, timeLabel(state.trimEnd), {976, 702, 1036, 722}, state.smallFormat.Get(), muted);
-    drawCenteredText(state, timeLabel(state.playPosition) + L" / " + timeLabel(state.editorDuration),
-                     {514, 700, 806, 722}, state.smallFormat.Get(), muted);
+    drawText(state, L".mp4", {664, 476, 714, 500}, state.bodyFormat.Get(), muted);
+    drawEditorMergeToggle(state);
+    drawUnifiedTimeline(state);
 
     drawButton(state, editorPlayRect, state.playing ? L"Ⅱ" : L"▶",
                HitTarget::editorPlay, false);
     drawFullscreenIconButton(state);
-    drawText(state, L"Spacja  play/pause  •  ← →  ±5 s",
-             {414, 731, 830, 753}, state.smallFormat.Get(), muted);
+    drawButton(state, editorCutModeRect,
+               state.cutEditorSelection ? L"Wycinanie: WŁ." : L"Wytnij fragment",
+               HitTarget::editorCutMode, false, state.editorDuration > 0.2);
+    drawCenteredText(state,
+                     preciseTimeLabel(state.playPosition) + L" / " +
+                         preciseTimeLabel(state.editorDuration),
+                     {598, 728, 836, 758}, state.smallFormat.Get(), muted);
     drawButton(state, editorSaveRect,
                state.cutEditorSelection ? L"Wytnij i zapisz jeden klip"
                                         : L"Eksportuj nowy klip",
@@ -2402,14 +2467,13 @@ void updateEditorVisibility(AppState& state) {
     if (state.videoWindow != nullptr) {
         if (state.mainWindow != nullptr) {
             const RECT video = physicalRect(
-                state.mainWindow, {284, 159, 1036, 566});
+                state.mainWindow, {284, 159, 1036, 420});
             MoveWindow(state.videoWindow, video.left, video.top,
                        std::max(1L, video.right - video.left),
                        std::max(1L, video.bottom - video.top), TRUE);
             if (state.mediaPlayer != nullptr) state.mediaPlayer->UpdateVideo();
         }
-        ShowWindow(state.videoWindow,
-                   state.page == Page::editor && !state.editorAudioView ? SW_SHOW : SW_HIDE);
+        ShowWindow(state.videoWindow, state.page == Page::editor ? SW_SHOW : SW_HIDE);
     }
 }
 
@@ -2546,7 +2610,7 @@ void exitFullscreen(AppState& state) {
     state.fullscreenVideoWindow = nullptr;
     state.fullscreen = false;
     if (fullscreenWindow != nullptr) DestroyWindow(fullscreenWindow);
-    const RECT video = physicalRect(state.mainWindow, {284, 159, 1036, 566});
+    const RECT video = physicalRect(state.mainWindow, {284, 159, 1036, 420});
     MoveWindow(state.videoWindow, video.left, video.top,
                std::max(1L, video.right - video.left),
                std::max(1L, video.bottom - video.top), TRUE);
@@ -2571,7 +2635,6 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
     state.editorAudioTracks = probeEditorAudioTracks(clip);
     state.editorAudioScroll = 0;
     state.activeEditorAudioTrack = -1;
-    state.editorAudioView = false;
     state.mergeEditorAudio = false;
     state.cutEditorSelection = false;
     state.activeField = HitTarget::none;
@@ -2681,7 +2744,7 @@ void moveEditorAudioHandle(AppState& state, const float x) {
     if (state.editorDuration <= 0.0 || state.activeEditorAudioTrack < 0 ||
         state.activeEditorAudioTrack >= static_cast<int>(state.editorAudioTracks.size())) return;
     const int visible = state.activeEditorAudioTrack - state.editorAudioScroll;
-    if (visible < 0 || visible >= 5) return;
+    if (visible < 0 || visible >= 3) return;
     const Rect timeline = editorAudioTimelineRect(visible);
     const double position = std::clamp(
         static_cast<double>((x - timeline.left) / (timeline.right - timeline.left)) *
@@ -3073,8 +3136,7 @@ void exportEditor(const HWND window, AppState& state) {
         return HitTarget::openClips;
     } else if (state.page == Page::editor) {
         if (editorBackRect.contains(x, y)) return HitTarget::editorBack;
-        if (editorAudioViewRect.contains(x, y)) return HitTarget::editorAudioView;
-        if (state.editorAudioView && editorMergeAudioRect.contains(x, y)) {
+        if (editorMergeAudioRect.contains(x, y)) {
             return HitTarget::editorMergeAudio;
         }
         if (editorCutModeRect.contains(x, y) && state.editorDuration > 0.2) {
@@ -3790,11 +3852,6 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
     case HitTarget::editorFullscreen:
         enterFullscreen(state);
         return;
-    case HitTarget::editorAudioView:
-        state.editorAudioView = !state.editorAudioView;
-        updateEditorVisibility(state);
-        InvalidateRect(window, nullptr, FALSE);
-        return;
     case HitTarget::editorMergeAudio:
         state.mergeEditorAudio = !state.mergeEditorAudio;
         InvalidateRect(window, nullptr, FALSE);
@@ -3862,9 +3919,9 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
         break;
     }
 
-    if (state.page == Page::editor && state.editorAudioView &&
-        x >= 292 && x <= 500 && y >= 216 && y < 536) {
-        const int index = static_cast<int>((y - 216) / 64) + state.editorAudioScroll;
+    if (state.page == Page::editor &&
+        x >= 284 && x <= 462 && y >= 578 && y < 710) {
+        const int index = static_cast<int>((y - 578) / 44) + state.editorAudioScroll;
         if (index >= 0 && index < static_cast<int>(state.editorAudioTracks.size())) {
             auto& track = state.editorAudioTracks[static_cast<std::size_t>(index)];
             track.included = !track.included;
@@ -3981,14 +4038,14 @@ LRESULT CALLBACK windowProcedure(
             const float x = logical.x;
             const float y = logical.y;
             const bool audioTimeline = state->page == Page::editor &&
-                state->editorAudioView && x >= 510 && x <= 1024 &&
-                y >= 216 && y < 536;
+                x >= editorTimelineRect.left && x <= editorTimelineRect.right &&
+                y >= 578 && y < 710;
             const bool row =
                 (state->page == Page::replay && !state->engine.isRunning() &&
                  x >= 280 && x <= 1038 && y >= 574 && y < 754) ||
                 (state->page == Page::clips && clipsListRect.contains(x, y)) ||
-                (state->page == Page::editor && state->editorAudioView &&
-                 x >= 292 && x <= 500 && y >= 216 && y < 536);
+                (state->page == Page::editor &&
+                 x >= 284 && x <= 462 && y >= 578 && y < 710);
             const HitTarget target = hitTest(*state, x, y);
             if (target == HitTarget::durationField || target == HitTarget::fpsField ||
                 target == HitTarget::bitrateField ||
@@ -4074,10 +4131,11 @@ LRESULT CALLBACK windowProcedure(
             }
         }
         if (state != nullptr && state->page == Page::editor &&
-            state->editorAudioView && state->editorDuration > 0.0 &&
-            logical.x >= 510 && logical.x <= 1024 &&
-            logical.y >= 216 && logical.y < 536) {
-            const int visible = static_cast<int>((logical.y - 216) / 64);
+            state->editorDuration > 0.0 &&
+            logical.x >= editorTimelineRect.left &&
+            logical.x <= editorTimelineRect.right &&
+            logical.y >= 578 && logical.y < 710) {
+            const int visible = static_cast<int>((logical.y - 578) / 44);
             const int index = visible + state->editorAudioScroll;
             if (index >= 0 && index < static_cast<int>(state->editorAudioTracks.size()) &&
                 state->editorAudioTracks[static_cast<std::size_t>(index)].included) {
@@ -4107,7 +4165,8 @@ LRESULT CALLBACK windowProcedure(
             state->editorDuration > 0.0 &&
             logical.x >= editorTimelineRect.left - 10 &&
             logical.x <= editorTimelineRect.right + 10 &&
-            logical.y >= 667 && logical.y <= 707) {
+            logical.y >= editorTimelineRect.top - 10 &&
+            logical.y <= editorTimelineRect.bottom + 10) {
             const float timelineWidth = editorTimelineRect.right - editorTimelineRect.left;
             const float startX = editorTimelineRect.left +
                 static_cast<float>(state->trimStart / state->editorDuration) * timelineWidth;
@@ -4279,7 +4338,7 @@ LRESULT CALLBACK windowProcedure(
         if (state != nullptr) {
             const int direction = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? -1 : 1;
             if (state->page == Page::replay) state->audioScroll += direction;
-            else if (state->page == Page::editor && state->editorAudioView) {
+            else if (state->page == Page::editor) {
                 state->editorAudioScroll += direction;
             } else state->clipScroll += direction;
             InvalidateRect(window, nullptr, FALSE);
