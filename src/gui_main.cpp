@@ -69,6 +69,7 @@ enum class Page { replay, clips, editor, settings };
 enum class HitTarget {
     none,
     minimize,
+    maximize,
     close,
     replayPage,
     clipsPage,
@@ -120,7 +121,8 @@ struct Rect final {
     }
 };
 
-constexpr Rect minimizeRect{1032, 15, 1066, 49};
+constexpr Rect minimizeRect{994, 15, 1028, 49};
+constexpr Rect maximizeRect{1032, 15, 1066, 49};
 constexpr Rect closeRect{1070, 15, 1104, 49};
 constexpr Rect replayNavRect{16, 112, 204, 160};
 constexpr Rect clipsNavRect{16, 168, 204, 216};
@@ -1547,6 +1549,7 @@ void drawSidebar(AppState& state) {
 
 void drawTitlebar(AppState& state) {
     const float minimizeHover = hoverValue(state, HitTarget::minimize);
+    const float maximizeHover = hoverValue(state, HitTarget::maximize);
     const float closeHover = hoverValue(state, HitTarget::close);
     if (minimizeHover > 0.01F) {
         D2D1_COLOR_F hoverColor = field;
@@ -1555,6 +1558,14 @@ void drawTitlebar(AppState& state) {
     }
     drawCenteredText(state, L"—", minimizeRect, state.headingFormat.Get(),
                      minimizeHover > 0.4F ? white : muted);
+    if (maximizeHover > 0.01F) {
+        D2D1_COLOR_F hoverColor = field;
+        hoverColor.a = maximizeHover;
+        fillRounded(state, maximizeRect, 8, hoverColor);
+    }
+    drawCenteredText(state, IsZoomed(state.mainWindow) ? L"❐" : L"□",
+                     maximizeRect, state.bodyFormat.Get(),
+                     maximizeHover > 0.4F ? white : muted);
     if (closeHover > 0.01F) {
         D2D1_COLOR_F closeColor = red;
         closeColor.a = closeHover;
@@ -3124,6 +3135,7 @@ void exportEditor(const HWND window, AppState& state) {
         return HitTarget::none;
     }
     if (minimizeRect.contains(x, y)) return HitTarget::minimize;
+    if (maximizeRect.contains(x, y)) return HitTarget::maximize;
     if (closeRect.contains(x, y)) return HitTarget::close;
     if (replayNavRect.contains(x, y)) return HitTarget::replayPage;
     if (clipsNavRect.contains(x, y)) return HitTarget::clipsPage;
@@ -3762,6 +3774,10 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
         ShowWindow(window, SW_HIDE);
         setStatus(window, state, L"NexPlay działa w zasobniku systemowym");
         return;
+    case HitTarget::maximize:
+        ShowWindow(window, IsZoomed(window) ? SW_RESTORE : SW_MAXIMIZE);
+        InvalidateRect(window, nullptr, FALSE);
+        return;
     case HitTarget::replayPage:
         closeEditorPlayer(state);
         state.page = Page::replay;
@@ -4030,6 +4046,7 @@ LRESULT CALLBACK windowProcedure(
             window, static_cast<float>(point.x), static_cast<float>(point.y));
         if (logical.y < 64 &&
             !minimizeRect.contains(logical.x, logical.y) &&
+            !maximizeRect.contains(logical.x, logical.y) &&
             !closeRect.contains(logical.x, logical.y)) {
             return HTCAPTION;
         }

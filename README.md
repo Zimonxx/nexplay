@@ -29,7 +29,8 @@ NexPlay to lekka nagrywarka powtórek dla Windows, korzystająca ze sprzętowego
 - wspólny timeline V1/A1–An z jedną skalą czasu, wyciszaniem i zakresem słyszalności ścieżek,
 - opcja połączenia końcowej edycji w jedną ścieżkę audio,
 - ciemny, autorski interfejs AMOLED z animacjami i konfigurowalnym akcentem.
-- responsywne okno wykorzystujące całą dostępną szerokość i wysokość ekranu.
+- responsywne okno wykorzystujące całą dostępną szerokość i wysokość ekranu,
+- przycisk maksymalizacji i przywracania rozmiaru okna.
 
 ## Wymagania
 
