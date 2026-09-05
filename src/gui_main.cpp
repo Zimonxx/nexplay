@@ -193,6 +193,38 @@ struct DesignViewport final {
     };
 }
 
+[[nodiscard]] Rect aspectFitRect(
+    const HWND window, const Rect bounds, const float aspectRatio) {
+    if (window == nullptr || aspectRatio <= 0.0F) return bounds;
+    const auto viewport = designViewport(window);
+    const float availableWidth =
+        (bounds.right - bounds.left) * viewport.scaleX;
+    const float availableHeight =
+        (bounds.bottom - bounds.top) * viewport.scaleY;
+    float fittedWidth = availableWidth;
+    float fittedHeight = availableHeight;
+    if (availableWidth / std::max(1.0F, availableHeight) > aspectRatio) {
+        fittedWidth = availableHeight * aspectRatio;
+    } else {
+        fittedHeight = availableWidth / aspectRatio;
+    }
+    const float designWidth = fittedWidth / viewport.scaleX;
+    const float designHeight = fittedHeight / viewport.scaleY;
+    const float centerX = (bounds.left + bounds.right) * 0.5F;
+    const float centerY = (bounds.top + bounds.bottom) * 0.5F;
+    return {
+        centerX - designWidth * 0.5F,
+        centerY - designHeight * 0.5F,
+        centerX + designWidth * 0.5F,
+        centerY + designHeight * 0.5F,
+    };
+}
+
+[[nodiscard]] Rect fixedAspectRect(const HWND window, const Rect bounds) {
+    const float height = std::max(0.001F, bounds.bottom - bounds.top);
+    return aspectFitRect(window, bounds, (bounds.right - bounds.left) / height);
+}
+
 struct AudioRow final {
     DWORD processId{};
     std::wstring name;
@@ -1448,19 +1480,46 @@ void drawToggle(AppState& state, const Rect rectangle, const float position) {
 }
 
 void drawCheckbox(AppState& state, const Rect rectangle, const bool checked) {
-    if (checked) drawGlow(state, rectangle, 5, primary, 0.22F);
-    fillRounded(state, rectangle, 5, checked ? primary : field);
+    const Rect box = fixedAspectRect(state.mainWindow, rectangle);
+    const auto viewport = designViewport(state.mainWindow);
+    const float xCorrection = viewport.scaleY / viewport.scaleX;
+    if (checked) {
+        for (int layer = 4; layer >= 1; --layer) {
+            const float spreadY = static_cast<float>(layer) * 2.0F;
+            const float spreadX = spreadY * xCorrection;
+            D2D1_COLOR_F glow = primary;
+            glow.a = 0.22F * (0.025F + static_cast<float>(5 - layer) * 0.014F);
+            state.brush->SetColor(glow);
+            state.renderTarget->DrawRoundedRectangle(
+                D2D1::RoundedRect(
+                    D2D1::RectF(box.left - spreadX, box.top - spreadY,
+                                box.right + spreadX, box.bottom + spreadY),
+                    (5.0F + spreadY) * xCorrection, 5.0F + spreadY),
+                state.brush.Get(), static_cast<float>(layer) * 1.6F);
+        }
+    }
+    state.brush->SetColor(checked ? primary : field);
+    state.renderTarget->FillRoundedRectangle(
+        D2D1::RoundedRect(box.d2d(), 5.0F * xCorrection, 5.0F),
+        state.brush.Get());
     if (!checked) {
-        strokeRounded(state, rectangle, 5, border);
+        state.brush->SetColor(border);
+        state.renderTarget->DrawRoundedRectangle(
+            D2D1::RoundedRect(box.d2d(), 5.0F * xCorrection, 5.0F),
+            state.brush.Get());
         return;
     }
+    const float width = box.right - box.left;
+    const float height = box.bottom - box.top;
     state.brush->SetColor(white);
     state.renderTarget->DrawLine(
-        D2D1::Point2F(rectangle.left + 5, rectangle.top + 10),
-        D2D1::Point2F(rectangle.left + 9, rectangle.top + 14), state.brush.Get(), 2.0F);
+        D2D1::Point2F(box.left + width * 0.25F, box.top + height * 0.50F),
+        D2D1::Point2F(box.left + width * 0.45F, box.top + height * 0.70F),
+        state.brush.Get(), 2.0F);
     state.renderTarget->DrawLine(
-        D2D1::Point2F(rectangle.left + 9, rectangle.top + 14),
-        D2D1::Point2F(rectangle.left + 16, rectangle.top + 6), state.brush.Get(), 2.0F);
+        D2D1::Point2F(box.left + width * 0.45F, box.top + height * 0.70F),
+        D2D1::Point2F(box.left + width * 0.80F, box.top + height * 0.30F),
+        state.brush.Get(), 2.0F);
 }
 
 void drawButton(AppState& state, const Rect rectangle, const std::wstring& label,
@@ -1848,12 +1907,14 @@ void drawClipsPage(AppState& state) {
         const float top = 176.0F + row * 276.0F;
         const Rect clipCard{left, top, left + 370, top + 258};
         const Rect imageArea{left + 10, top + 10, left + 360, top + 207};
+        const Rect thumbnailArea = aspectFitRect(
+            state.mainWindow, imageArea, 16.0F / 9.0F);
         const auto& clip = state.clips[static_cast<std::size_t>(index)];
         const bool hovered = clipCard.contains(state.mouseX, state.mouseY);
-        const bool previewHovered = imageArea.contains(state.mouseX, state.mouseY);
+        const bool previewHovered = thumbnailArea.contains(state.mouseX, state.mouseY);
         const float previewPosition = previewHovered
-            ? std::clamp((state.mouseX - imageArea.left) /
-                         (imageArea.right - imageArea.left), 0.0F, 0.999F)
+            ? std::clamp((state.mouseX - thumbnailArea.left) /
+                         (thumbnailArea.right - thumbnailArea.left), 0.0F, 0.999F)
             : 0.0F;
         const bool timelineKnown = clip.preview != nullptr &&
             clip.preview->duration > 0.0 && clip.preview->framesPerSecond > 0.0;
@@ -1894,6 +1955,7 @@ void drawClipsPage(AppState& state) {
             drawGlow(state, clipCard, 14, primary, 0.18F + pulse * 0.10F);
         }
         fillRounded(state, imageArea, 10, D2D1_COLOR_F{0.008F, 0.008F, 0.012F, 1});
+        fillRounded(state, thumbnailArea, 10, D2D1_COLOR_F{0.008F, 0.008F, 0.012F, 1});
         const std::wstring bitmapKey = clip.path.wstring() + L"#" +
             std::to_wstring(displayedFrame);
         if (ID2D1Bitmap* bitmap = thumbnail == nullptr
@@ -1901,7 +1963,8 @@ void drawClipsPage(AppState& state) {
                 : thumbnailBitmap(state, bitmapKey, *thumbnail);
             bitmap != nullptr) {
             state.renderTarget->DrawBitmap(
-                bitmap, imageArea.d2d(), 1.0F, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                bitmap, thumbnailArea.d2d(), 1.0F,
+                D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
         } else {
             const bool failed = state.thumbnailFailures.contains(
                 {clip.path, requestedFrame}) ||
@@ -1909,24 +1972,34 @@ void drawClipsPage(AppState& state) {
                  state.thumbnailFailures.contains({clip.path, 0}));
             drawCenteredText(state,
                              failed ? L"Podgląd niedostępny" : L"Generowanie miniatury…",
-                             imageArea,
+                             thumbnailArea,
                              state.smallFormat.Get(), muted);
         }
-        strokeRounded(state, imageArea, 10, hovered ? primary : border);
+        strokeRounded(state, thumbnailArea, 10, hovered ? primary : border);
         if (!previewHovered) {
-            fillRounded(state, {left + 161, top + 82, left + 209, top + 130}, 24,
+            const float centerX = (thumbnailArea.left + thumbnailArea.right) * 0.5F;
+            const float centerY = (thumbnailArea.top + thumbnailArea.bottom) * 0.5F;
+            const Rect playButton = fixedAspectRect(
+                state.mainWindow,
+                {centerX - 24, centerY - 24, centerX + 24, centerY + 24});
+            fillRounded(state, playButton, 24,
                         D2D1_COLOR_F{0.025F, 0.020F, 0.050F, 0.88F});
-            drawCenteredText(state, L"▶", {left + 161, top + 82, left + 209, top + 130},
+            drawCenteredText(state, L"▶", playButton,
                              state.headingFormat.Get(), white);
         } else {
             fillRounded(state,
-                        {imageArea.left, imageArea.bottom - 5,
-                         imageArea.left + previewPosition *
-                             (imageArea.right - imageArea.left), imageArea.bottom},
+                        {thumbnailArea.left, thumbnailArea.bottom - 5,
+                         thumbnailArea.left + previewPosition *
+                             (thumbnailArea.right - thumbnailArea.left),
+                         thumbnailArea.bottom},
                         2, primary);
             if (timelineKnown) {
-                const Rect timeBadge{imageArea.right - 120, imageArea.bottom - 34,
-                                     imageArea.right - 10, imageArea.bottom - 10};
+                const auto viewport = designViewport(state.mainWindow);
+                const float badgeWidth = 110.0F * viewport.scaleY / viewport.scaleX;
+                const Rect timeBadge{thumbnailArea.right - badgeWidth - 10,
+                                     thumbnailArea.bottom - 34,
+                                     thumbnailArea.right - 10,
+                                     thumbnailArea.bottom - 10};
                 fillRounded(state, timeBadge, 7,
                             D2D1_COLOR_F{0.010F, 0.010F, 0.016F, 0.88F});
                 const double frameTime = static_cast<double>(requestedFrame) /
@@ -2391,8 +2464,11 @@ void drawSettingsPage(AppState& state) {
     drawText(state, L"Kliknij lub przeciągnij, aby wybrać dowolny kolor.",
              {660, 552, 1028, 574}, state.smallFormat.Get(), muted);
 
+    const Rect accentPlane = fixedAspectRect(state.mainWindow, accentPlaneRect);
+    const Rect accentHue = fixedAspectRect(state.mainWindow, accentHueRect);
+    const Rect accentPreview = fixedAspectRect(state.mainWindow, accentPreviewRect);
     const D2D1_COLOR_F hueColor = hsvColor(state.accentHue, 1.0F, 1.0F);
-    fillRounded(state, accentPlaneRect, 10, hueColor);
+    fillRounded(state, accentPlane, 10, hueColor);
     const auto overlayGradient = [&](const D2D1_GRADIENT_STOP* stops,
                                      const UINT32 count,
                                      const D2D1_POINT_2F start,
@@ -2412,17 +2488,17 @@ void drawSettingsPage(AppState& state) {
         {0.0F, D2D1_COLOR_F{1, 1, 1, 1}}, {1.0F, D2D1_COLOR_F{1, 1, 1, 0}},
     };
     overlayGradient(saturationStops, 2,
-                    D2D1::Point2F(accentPlaneRect.left, accentPlaneRect.top),
-                    D2D1::Point2F(accentPlaneRect.right, accentPlaneRect.top),
-                    accentPlaneRect);
+                    D2D1::Point2F(accentPlane.left, accentPlane.top),
+                    D2D1::Point2F(accentPlane.right, accentPlane.top),
+                    accentPlane);
     const D2D1_GRADIENT_STOP valueStops[]{
         {0.0F, D2D1_COLOR_F{0, 0, 0, 0}}, {1.0F, D2D1_COLOR_F{0, 0, 0, 1}},
     };
     overlayGradient(valueStops, 2,
-                    D2D1::Point2F(accentPlaneRect.left, accentPlaneRect.top),
-                    D2D1::Point2F(accentPlaneRect.left, accentPlaneRect.bottom),
-                    accentPlaneRect);
-    strokeRounded(state, accentPlaneRect, 10, border);
+                    D2D1::Point2F(accentPlane.left, accentPlane.top),
+                    D2D1::Point2F(accentPlane.left, accentPlane.bottom),
+                    accentPlane);
+    strokeRounded(state, accentPlane, 10, border);
 
     constexpr D2D1_GRADIENT_STOP hueStops[]{
         {0.0F, {1, 0, 0, 1}}, {0.167F, {1, 1, 0, 1}},
@@ -2431,39 +2507,46 @@ void drawSettingsPage(AppState& state) {
         {1.0F, {1, 0, 0, 1}},
     };
     overlayGradient(hueStops, static_cast<UINT32>(std::size(hueStops)),
-                    D2D1::Point2F(accentHueRect.left, accentHueRect.top),
-                    D2D1::Point2F(accentHueRect.left, accentHueRect.bottom),
-                    accentHueRect);
-    strokeRounded(state, accentHueRect, 10, border);
+                    D2D1::Point2F(accentHue.left, accentHue.top),
+                    D2D1::Point2F(accentHue.left, accentHue.bottom),
+                    accentHue);
+    strokeRounded(state, accentHue, 10, border);
 
-    const float pickerX = accentPlaneRect.left +
-        state.accentSaturation * (accentPlaneRect.right - accentPlaneRect.left);
-    const float pickerY = accentPlaneRect.top +
-        (1.0F - state.accentValue) * (accentPlaneRect.bottom - accentPlaneRect.top);
-    drawGlow(state, {pickerX - 7, pickerY - 7, pickerX + 7, pickerY + 7}, 7,
+    const float pickerX = accentPlane.left +
+        state.accentSaturation * (accentPlane.right - accentPlane.left);
+    const float pickerY = accentPlane.top +
+        (1.0F - state.accentValue) * (accentPlane.bottom - accentPlane.top);
+    const Rect pickerGlow = fixedAspectRect(
+        state.mainWindow, {pickerX - 7, pickerY - 7, pickerX + 7, pickerY + 7});
+    drawGlow(state, pickerGlow, 7,
              white, 0.45F);
+    const auto viewport = designViewport(state.mainWindow);
+    const float circleRadiusX = 6.0F * viewport.scaleY / viewport.scaleX;
     state.brush->SetColor(white);
     state.renderTarget->DrawEllipse(
-        D2D1::Ellipse(D2D1::Point2F(pickerX, pickerY), 6, 6), state.brush.Get(), 2.0F);
-    const float hueY = accentHueRect.top +
-        state.accentHue * (accentHueRect.bottom - accentHueRect.top);
+        D2D1::Ellipse(D2D1::Point2F(pickerX, pickerY), circleRadiusX, 6),
+        state.brush.Get(), 2.0F);
+    const float hueY = accentHue.top +
+        state.accentHue * (accentHue.bottom - accentHue.top);
+    const float hueHandleX = 3.0F * viewport.scaleY / viewport.scaleX;
     state.brush->SetColor(white);
     state.renderTarget->DrawRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(accentHueRect.left - 3, hueY - 3,
-                                     accentHueRect.right + 3, hueY + 3), 3, 3),
+        D2D1::RoundedRect(D2D1::RectF(accentHue.left - hueHandleX, hueY - 3,
+                                     accentHue.right + hueHandleX, hueY + 3),
+                          hueHandleX, 3),
         state.brush.Get(), 2.0F);
 
     const float pulse = 0.62F + 0.38F * std::sin(
         static_cast<float>(GetTickCount64() % 2'600) / 2'600.0F * 6.283185F);
-    drawGlow(state, accentPreviewRect, 12, primary, 0.30F + pulse * 0.26F);
-    fillRounded(state, accentPreviewRect, 12, primary);
+    drawGlow(state, accentPreview, 12, primary, 0.30F + pulse * 0.26F);
+    fillRounded(state, accentPreview, 12, primary);
     drawCenteredText(state, accentHexLabel(state),
-                     {accentPreviewRect.left, accentPreviewRect.top + 10,
-                      accentPreviewRect.right, accentPreviewRect.top + 42},
+                     {accentPreview.left, accentPreview.top + 10,
+                      accentPreview.right, accentPreview.top + 42},
                      state.headingFormat.Get(), white);
     drawCenteredText(state, L"AKCENT",
-                     {accentPreviewRect.left, accentPreviewRect.top + 49,
-                      accentPreviewRect.right, accentPreviewRect.bottom - 4},
+                     {accentPreview.left, accentPreview.top + 49,
+                      accentPreview.right, accentPreview.bottom - 4},
                      state.smallFormat.Get(), white);
 }
 
@@ -3200,8 +3283,12 @@ void exportEditor(const HWND window, AppState& state) {
         if (autoBufferRect.contains(x, y)) return HitTarget::autoBufferToggle;
         if (saveHotkeyRect.contains(x, y)) return HitTarget::saveHotkey;
         if (stopHotkeyRect.contains(x, y)) return HitTarget::stopHotkey;
-        if (accentPlaneRect.contains(x, y)) return HitTarget::accentPlane;
-        if (accentHueRect.contains(x, y)) return HitTarget::accentHue;
+        if (fixedAspectRect(state.mainWindow, accentPlaneRect).contains(x, y)) {
+            return HitTarget::accentPlane;
+        }
+        if (fixedAspectRect(state.mainWindow, accentHueRect).contains(x, y)) {
+            return HitTarget::accentHue;
+        }
     }
     return HitTarget::none;
 }
@@ -3752,19 +3839,21 @@ void completeHotkeyCapture(
 }
 
 void updateAccentFromPointer(AppState& state, const float x, const float y) {
+    const Rect accentPlane = fixedAspectRect(state.mainWindow, accentPlaneRect);
+    const Rect accentHue = fixedAspectRect(state.mainWindow, accentHueRect);
     if (state.colorDrag == ColorDrag::plane) {
         state.accentSaturation = std::clamp(
-            (x - accentPlaneRect.left) /
-                (accentPlaneRect.right - accentPlaneRect.left),
+            (x - accentPlane.left) /
+                (accentPlane.right - accentPlane.left),
             0.0F, 1.0F);
         state.accentValue = 1.0F - std::clamp(
-            (y - accentPlaneRect.top) /
-                (accentPlaneRect.bottom - accentPlaneRect.top),
+            (y - accentPlane.top) /
+                (accentPlane.bottom - accentPlane.top),
             0.0F, 1.0F);
     } else if (state.colorDrag == ColorDrag::hue) {
         state.accentHue = std::clamp(
-            (y - accentHueRect.top) /
-                (accentHueRect.bottom - accentHueRect.top),
+            (y - accentHue.top) /
+                (accentHue.bottom - accentHue.top),
             0.0F, 0.9999F);
     }
     applyAccentColor(state);
@@ -4174,8 +4263,10 @@ LRESULT CALLBACK windowProcedure(
         if (state != nullptr && state->page == Page::settings) {
             const float x = logical.x;
             const float y = logical.y;
-            if (accentPlaneRect.contains(x, y) || accentHueRect.contains(x, y)) {
-                state->colorDrag = accentPlaneRect.contains(x, y)
+            const Rect accentPlane = fixedAspectRect(window, accentPlaneRect);
+            const Rect accentHue = fixedAspectRect(window, accentHueRect);
+            if (accentPlane.contains(x, y) || accentHue.contains(x, y)) {
+                state->colorDrag = accentPlane.contains(x, y)
                     ? ColorDrag::plane : ColorDrag::hue;
                 cancelHotkeyCapture(window, *state);
                 SetCapture(window);
