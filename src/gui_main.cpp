@@ -4552,6 +4552,18 @@ LRESULT CALLBACK windowProcedure(
         if (auto* limits = reinterpret_cast<MINMAXINFO*>(lParam); limits != nullptr) {
             limits->ptMinTrackSize.x = 896;
             limits->ptMinTrackSize.y = 640;
+            MONITORINFO monitorInfo{sizeof(monitorInfo)};
+            const HMONITOR monitor = MonitorFromWindow(
+                window, MONITOR_DEFAULTTONEAREST);
+            if (GetMonitorInfoW(monitor, &monitorInfo)) {
+                const RECT& monitorArea = monitorInfo.rcMonitor;
+                const RECT& workArea = monitorInfo.rcWork;
+                limits->ptMaxPosition.x = workArea.left - monitorArea.left;
+                limits->ptMaxPosition.y = workArea.top - monitorArea.top;
+                limits->ptMaxSize.x = workArea.right - workArea.left;
+                limits->ptMaxSize.y = workArea.bottom - workArea.top;
+                limits->ptMaxTrackSize = limits->ptMaxSize;
+            }
         }
         return 0;
     case WM_DESTROY:
