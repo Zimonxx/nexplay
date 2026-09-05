@@ -157,9 +157,8 @@ constexpr Rect accentHueRect{818, 590, 846, 684};
 constexpr Rect accentPreviewRect{870, 590, 1028, 684};
 
 struct DesignViewport final {
-    float scale{1.0F};
-    float offsetX{};
-    float offsetY{};
+    float scaleX{1.0F};
+    float scaleY{1.0F};
 };
 
 [[nodiscard]] DesignViewport designViewport(const HWND window) {
@@ -167,12 +166,9 @@ struct DesignViewport final {
     GetClientRect(window, &client);
     const float width = static_cast<float>(std::max(1L, client.right - client.left));
     const float height = static_cast<float>(std::max(1L, client.bottom - client.top));
-    const float scale = std::max(
-        0.01F, std::min(width / windowWidth, height / windowHeight));
     return {
-        .scale = scale,
-        .offsetX = (width - windowWidth * scale) * 0.5F,
-        .offsetY = (height - windowHeight * scale) * 0.5F,
+        .scaleX = std::max(0.01F, width / windowWidth),
+        .scaleY = std::max(0.01F, height / windowHeight),
     };
 }
 
@@ -180,18 +176,18 @@ struct DesignViewport final {
     const HWND window, const float x, const float y) {
     const auto viewport = designViewport(window);
     return {
-        (x - viewport.offsetX) / viewport.scale,
-        (y - viewport.offsetY) / viewport.scale,
+        x / viewport.scaleX,
+        y / viewport.scaleY,
     };
 }
 
 [[nodiscard]] RECT physicalRect(const HWND window, const Rect rectangle) {
     const auto viewport = designViewport(window);
     return {
-        static_cast<LONG>(std::lround(viewport.offsetX + rectangle.left * viewport.scale)),
-        static_cast<LONG>(std::lround(viewport.offsetY + rectangle.top * viewport.scale)),
-        static_cast<LONG>(std::lround(viewport.offsetX + rectangle.right * viewport.scale)),
-        static_cast<LONG>(std::lround(viewport.offsetY + rectangle.bottom * viewport.scale)),
+        static_cast<LONG>(std::lround(rectangle.left * viewport.scaleX)),
+        static_cast<LONG>(std::lround(rectangle.top * viewport.scaleY)),
+        static_cast<LONG>(std::lround(rectangle.right * viewport.scaleX)),
+        static_cast<LONG>(std::lround(rectangle.bottom * viewport.scaleY)),
     };
 }
 
@@ -1326,9 +1322,21 @@ void drawAmbientGlow(AppState& state) {
 void drawText(AppState& state, const std::wstring& text, const Rect rectangle,
               IDWriteTextFormat* format, const D2D1_COLOR_F color) {
     state.brush->SetColor(color);
+    D2D1_MATRIX_3X2_F previousTransform{};
+    state.renderTarget->GetTransform(&previousTransform);
+    Rect textRectangle = rectangle;
+    if (state.mainWindow != nullptr) {
+        const auto viewport = designViewport(state.mainWindow);
+        const float horizontalRatio = viewport.scaleX / viewport.scaleY;
+        textRectangle.left *= horizontalRatio;
+        textRectangle.right *= horizontalRatio;
+        state.renderTarget->SetTransform(D2D1::Matrix3x2F::Scale(
+            viewport.scaleY, viewport.scaleY));
+    }
     state.renderTarget->DrawTextW(
-        text.c_str(), static_cast<UINT32>(text.size()), format, rectangle.d2d(),
+        text.c_str(), static_cast<UINT32>(text.size()), format, textRectangle.d2d(),
         state.brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    state.renderTarget->SetTransform(previousTransform);
 }
 
 void drawCenteredText(AppState& state, const std::wstring& text, const Rect rectangle,
@@ -2437,8 +2445,7 @@ void paint(const HWND window, AppState& state) {
         state.renderTarget->Clear(background);
         const auto viewport = designViewport(window);
         state.renderTarget->SetTransform(D2D1::Matrix3x2F(
-            viewport.scale, 0, 0, viewport.scale,
-            viewport.offsetX, viewport.offsetY));
+            viewport.scaleX, 0, 0, viewport.scaleY, 0, 0));
         drawAmbientGlow(state);
         drawSidebar(state);
         drawTitlebar(state);
