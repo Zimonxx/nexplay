@@ -42,6 +42,8 @@ constexpr UINT autoStartMessage = WM_APP + 4;
 constexpr UINT exitFullscreenMessage = WM_APP + 5;
 constexpr UINT thumbnailReadyMessage = WM_APP + 6;
 constexpr UINT clearEditorFocusMessage = WM_APP + 7;
+constexpr UINT togglePlaybackMessage = WM_APP + 8;
+constexpr UINT_PTR videoClickTimerId = 1;
 constexpr int saveHotkeyId = 1;
 constexpr int stopHotkeyId = 2;
 constexpr int idTrayShow = 201;
@@ -296,13 +298,31 @@ LRESULT CALLBACK videoWindowProcedure(
     if (message == WM_LBUTTONDOWN && owner != nullptr) {
         PostMessageW(owner, clearEditorFocusMessage, 0, 0);
     }
+    if (message == WM_LBUTTONUP && owner != nullptr) {
+        if (RemovePropW(window, L"NexPlaySuppressSingleClick") != nullptr) {
+            return 0;
+        }
+        SetTimer(window, videoClickTimerId, GetDoubleClickTime(), nullptr);
+        return 0;
+    }
+    if (message == WM_TIMER && wParam == videoClickTimerId) {
+        KillTimer(window, videoClickTimerId);
+        if (owner != nullptr) PostMessageW(owner, togglePlaybackMessage, 0, 0);
+        return 0;
+    }
     if (message == WM_KEYDOWN && wParam == VK_ESCAPE) {
         if (owner != nullptr) PostMessageW(owner, exitFullscreenMessage, 0, 0);
         return 0;
     }
     if (message == WM_LBUTTONDBLCLK) {
+        KillTimer(window, videoClickTimerId);
+        SetPropW(window, L"NexPlaySuppressSingleClick", reinterpret_cast<HANDLE>(1));
         if (owner != nullptr) PostMessageW(owner, exitFullscreenMessage, 1, 0);
         return 0;
+    }
+    if (message == WM_NCDESTROY) {
+        KillTimer(window, videoClickTimerId);
+        RemovePropW(window, L"NexPlaySuppressSingleClick");
     }
     if (message == WM_ERASEBKGND) {
         const RECT area = [] (const HWND target) {
@@ -3200,6 +3220,16 @@ LRESULT CALLBACK windowProcedure(
             state->activeField = HitTarget::none;
             state->replaceFieldOnInput = false;
             InvalidateRect(window, nullptr, FALSE);
+        }
+        return 0;
+    case togglePlaybackMessage:
+        if (state != nullptr && state->page == Page::editor &&
+            activeEditorPlayer(*state) != nullptr) {
+            toggleEditorPlayback(*state);
+            InvalidateRect(window, nullptr, FALSE);
+            if (state->fullscreenWindow != nullptr) {
+                InvalidateRect(state->fullscreenWindow, nullptr, FALSE);
+            }
         }
         return 0;
     case WM_HOTKEY:

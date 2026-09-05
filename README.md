@@ -76,6 +76,8 @@ stereo; mikrofon zachowuje swoją liczbę kanałów i częstotliwość próbkowa
   systemowo, pokazać go w folderze, skopiować ścieżkę albo przenieść nagranie
   do Kosza,
 - otwiera klipy we wbudowanym odtwarzaczu bez wychodzenia z NexPlay,
+- pojedyncze kliknięcie obrazu przełącza odtwarzanie i pauzę, a podwójne
+  kliknięcie przełącza pełny ekran bez wywoływania pojedynczej akcji,
 - ma edytor nazwy i osi czasu z dwoma uchwytami przycinania,
 - pozwala przewijać klip kliknięciem lub przeciągnięciem po osi czasu bez
   zmiany zakresu przycięcia,
