@@ -92,6 +92,7 @@ enum class HitTarget {
     editorFullscreen,
     editorAudioView,
     editorMergeAudio,
+    editorCutMode,
     settingsPage,
     autostartToggle,
     autoBufferToggle,
@@ -145,6 +146,7 @@ constexpr Rect editorPlayRect{284, 721, 334, 761};
 constexpr Rect editorFullscreenRect{346, 721, 396, 761};
 constexpr Rect editorAudioViewRect{870, 91, 1036, 129};
 constexpr Rect editorMergeAudioRect{814, 168, 1018, 198};
+constexpr Rect editorCutModeRect{670, 648, 834, 676};
 constexpr Rect editorSaveRect{846, 721, 1036, 761};
 constexpr Rect editorNameRect{284, 604, 654, 648};
 constexpr Rect editorTimelineRect{284, 682, 1036, 700};
@@ -245,6 +247,7 @@ struct AppState final {
     int activeEditorAudioTrack{-1};
     bool editorAudioView{};
     bool mergeEditorAudio{};
+    bool cutEditorSelection{};
     DragHandle dragHandle{DragHandle::none};
     bool playing{};
     bool fullscreen{};
@@ -946,8 +949,13 @@ struct EditorResult final {
     const double start,
     const double end,
     const std::vector<EditorAudioTrack>& audioTracks,
-    const bool mergeAudio) {
-    if (!validClipName(outputName) || end - start < 0.1) {
+    const bool mergeAudio,
+    const bool cutSelection,
+    const double fullDuration) {
+    const double selectedDuration = end - start;
+    if (!validClipName(outputName) || selectedDuration < 0.05 ||
+        (!cutSelection && selectedDuration < 0.1) ||
+        (cutSelection && (fullDuration <= 0.0 || fullDuration - selectedDuration < 0.1))) {
         return {false, {}, L"Sprawdź nazwę oraz zakres przycięcia."};
     }
     if (outputName.ends_with(L".mp4")) outputName.resize(outputName.size() - 4);
@@ -959,59 +967,116 @@ struct EditorResult final {
     const auto temporary = input.parent_path() /
         (L".nexplay-edit-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
          std::to_wstring(GetTickCount64()) + L".mp4");
+
+    struct KeptSegment final { double start; double end; };
+    std::vector<KeptSegment> keptSegments;
+    if (cutSelection) {
+        if (start > 0.001) keptSegments.push_back({0.0, start});
+        if (end < fullDuration - 0.001) keptSegments.push_back({end, fullDuration});
+    } else {
+        keptSegments.push_back({start, end});
+    }
+    if (keptSegments.empty()) return {false, {}, L"Nie można wyciąć całego klipu."};
+    double outputDuration{};
+    for (const auto& segment : keptSegments) outputDuration += segment.end - segment.start;
+
     std::vector<std::wstring> arguments{
         L"ffmpeg.exe", L"-hide_banner", L"-loglevel", L"error", L"-y",
-        L"-ss", secondsArgument(start), L"-i", quoteProcessArgument(input.wstring()),
+        L"-i", quoteProcessArgument(input.wstring()),
     };
-    const double duration = end - start;
     std::vector<const EditorAudioTrack*> includedTracks;
     for (const auto& track : audioTracks) {
         if (track.included) includedTracks.push_back(&track);
     }
-    if (audioTracks.empty()) {
-        arguments.insert(arguments.end(), {L"-map", L"0"});
+
+    std::wstring filters;
+    const auto appendFilter = [&filters](std::wstring filter) {
+        if (!filters.empty()) filters.push_back(L';');
+        filters += std::move(filter);
+    };
+    for (std::size_t segmentIndex = 0; segmentIndex < keptSegments.size(); ++segmentIndex) {
+        const auto& segment = keptSegments[segmentIndex];
+        appendFilter(
+            L"[0:v:0]trim=start=" + secondsArgument(segment.start) +
+            L":end=" + secondsArgument(segment.end) +
+            L",setpts=PTS-STARTPTS[vseg" + std::to_wstring(segmentIndex) + L"]");
+    }
+    std::wstring videoOutput;
+    if (keptSegments.size() == 1) {
+        videoOutput = L"[vseg0]";
     } else {
-        std::wstring filters;
-        for (std::size_t index = 0; index < includedTracks.size(); ++index) {
-            const auto& track = *includedTracks[index];
-            const double audibleStart = std::clamp(track.start - start, 0.0, duration);
-            const double audibleEnd = std::clamp(track.end - start, 0.0, duration);
-            if (!filters.empty()) filters.push_back(L';');
-            filters += L"[0:" + std::to_wstring(track.streamIndex) +
-                L"]atrim=start=0:end=" + secondsArgument(duration) +
+        std::wstring concat;
+        for (std::size_t index = 0; index < keptSegments.size(); ++index) {
+            concat += L"[vseg" + std::to_wstring(index) + L"]";
+        }
+        concat += L"concat=n=" + std::to_wstring(keptSegments.size()) +
+            L":v=1:a=0[vout]";
+        appendFilter(std::move(concat));
+        videoOutput = L"[vout]";
+    }
+
+    for (std::size_t trackIndex = 0; trackIndex < includedTracks.size(); ++trackIndex) {
+        const auto& track = *includedTracks[trackIndex];
+        for (std::size_t segmentIndex = 0;
+             segmentIndex < keptSegments.size(); ++segmentIndex) {
+            const auto& segment = keptSegments[segmentIndex];
+            const double duration = segment.end - segment.start;
+            const double audibleStart = std::clamp(
+                track.start - segment.start, 0.0, duration);
+            const double audibleEnd = std::clamp(
+                track.end - segment.start, 0.0, duration);
+            appendFilter(
+                L"[0:" + std::to_wstring(track.streamIndex) +
+                L"]atrim=start=" + secondsArgument(segment.start) +
+                L":end=" + secondsArgument(segment.end) +
                 L",asetpts=PTS-STARTPTS,volume=0:enable='lt(t," +
                 secondsArgument(audibleStart) + L")+gte(t," +
-                secondsArgument(audibleEnd) + L")'[a" +
-                std::to_wstring(index) + L"]";
+                secondsArgument(audibleEnd) + L")',apad=whole_dur=" +
+                secondsArgument(duration) + L"[a" + std::to_wstring(trackIndex) +
+                L"seg" + std::to_wstring(segmentIndex) + L"]");
         }
-        if (mergeAudio && includedTracks.size() > 1) {
-            if (!filters.empty()) filters.push_back(L';');
-            for (std::size_t index = 0; index < includedTracks.size(); ++index) {
-                filters += L"[a" + std::to_wstring(index) + L"]";
-            }
-            filters += L"amix=inputs=" + std::to_wstring(includedTracks.size()) +
-                L":duration=longest:dropout_transition=0:normalize=1[amix]";
-        }
-        if (!filters.empty()) {
-            arguments.insert(arguments.end(), {L"-filter_complex", filters});
-        }
-        arguments.insert(arguments.end(), {L"-map", L"0:v:0"});
-        if (mergeAudio && includedTracks.size() > 1) {
-            arguments.insert(arguments.end(), {L"-map", L"[amix]"});
+        if (keptSegments.size() == 1) {
+            appendFilter(
+                L"[a" + std::to_wstring(trackIndex) + L"seg0]anull[a" +
+                std::to_wstring(trackIndex) + L"]");
         } else {
-            for (std::size_t index = 0; index < includedTracks.size(); ++index) {
-                arguments.insert(arguments.end(), {
-                    L"-map", L"[a" + std::to_wstring(index) + L"]",
-                });
+            std::wstring concat;
+            for (std::size_t index = 0; index < keptSegments.size(); ++index) {
+                concat += L"[a" + std::to_wstring(trackIndex) + L"seg" +
+                    std::to_wstring(index) + L"]";
             }
+            concat += L"concat=n=" + std::to_wstring(keptSegments.size()) +
+                L":v=0:a=1[a" + std::to_wstring(trackIndex) + L"]";
+            appendFilter(std::move(concat));
         }
-        if (includedTracks.empty()) arguments.push_back(L"-an");
     }
+    if (mergeAudio && includedTracks.size() > 1) {
+        std::wstring mix;
+        for (std::size_t index = 0; index < includedTracks.size(); ++index) {
+            mix += L"[a" + std::to_wstring(index) + L"]";
+        }
+        mix += L"amix=inputs=" + std::to_wstring(includedTracks.size()) +
+            L":duration=longest:dropout_transition=0:normalize=1[amix]";
+        appendFilter(std::move(mix));
+    }
+
+    arguments.insert(arguments.end(), {L"-filter_complex", filters, L"-map", videoOutput});
+    if (mergeAudio && includedTracks.size() > 1) {
+        arguments.insert(arguments.end(), {L"-map", L"[amix]"});
+    } else {
+        for (std::size_t index = 0; index < includedTracks.size(); ++index) {
+            arguments.insert(arguments.end(), {
+                L"-map", L"[a" + std::to_wstring(index) + L"]",
+            });
+        }
+    }
+    if (includedTracks.empty()) arguments.push_back(L"-an");
+
     arguments.insert(arguments.end(), {
         L"-map_metadata", L"0", L"-c:v", L"h264_nvenc", L"-preset", L"p5",
         L"-cq", L"18",
     });
-    if (!audioTracks.empty() && !includedTracks.empty()) {
+    if (!includedTracks.empty()) {
         arguments.insert(arguments.end(), {L"-c:a", L"aac", L"-b:a", L"192k"});
         if (mergeAudio && includedTracks.size() > 1) {
             arguments.insert(arguments.end(), {
@@ -1024,11 +1089,9 @@ struct EditorResult final {
                     L"handler_name=" + includedTracks[index]->name));
             }
         }
-    } else if (audioTracks.empty()) {
-        arguments.insert(arguments.end(), {L"-c:a", L"aac", L"-b:a", L"192k"});
     }
     arguments.insert(arguments.end(), {
-        L"-t", secondsArgument(duration), L"-movflags", L"+faststart",
+        L"-t", secondsArgument(outputDuration), L"-movflags", L"+faststart",
         quoteProcessArgument(temporary.wstring()),
     });
     if (runHiddenProcess(arguments) != 0) {
@@ -2021,8 +2084,13 @@ void drawEditorPage(AppState& state) {
     drawText(state, L"Wszystkie ścieżki audio zostaną zachowane.",
              {730, 617, 1036, 642}, state.smallFormat.Get(), muted);
     drawText(state,
-             L"Kliknij pasek, aby przewinąć  •  przeciągnij biały uchwyt, aby przyciąć",
-             {284, 653, 850, 675}, state.smallFormat.Get(), muted);
+             state.cutEditorSelection
+                 ? L"Czerwony zakres zostanie usunięty, a reszta połączona."
+                 : L"Kliknij pasek, aby przewinąć  •  białe uchwyty przycinają brzegi",
+             {284, 653, 660, 675}, state.smallFormat.Get(), muted);
+    drawButton(state, editorCutModeRect,
+               state.cutEditorSelection ? L"Wycinanie: WŁ." : L"Wytnij fragment",
+               HitTarget::editorCutMode, false, state.editorDuration > 0.2);
 
     const double duration = std::max(0.001, state.editorDuration);
     const float startX = editorTimelineRect.left +
@@ -2036,8 +2104,17 @@ void drawEditorPage(AppState& state) {
         (editorTimelineRect.right - editorTimelineRect.left);
 
     fillRounded(state, {editorTimelineRect.left, 682, editorTimelineRect.right, 690}, 4, border);
-    drawGlow(state, {startX, 681, endX, 691}, 5, primary, 0.30F);
-    fillRounded(state, {startX, 681, endX, 691}, 5, primary);
+    if (state.cutEditorSelection) {
+        D2D1_COLOR_F retained = primary;
+        retained.a = 0.38F;
+        fillRounded(state, {editorTimelineRect.left, 681,
+                            editorTimelineRect.right, 691}, 5, retained);
+        drawGlow(state, {startX, 681, endX, 691}, 5, red, 0.34F);
+        fillRounded(state, {startX, 681, endX, 691}, 5, red);
+    } else {
+        drawGlow(state, {startX, 681, endX, 691}, 5, primary, 0.30F);
+        fillRounded(state, {startX, 681, endX, 691}, 5, primary);
+    }
     state.brush->SetColor(accentSecondary);
     state.renderTarget->DrawLine(
         D2D1::Point2F(playX, 673), D2D1::Point2F(playX, 703), state.brush.Get(), 1.5F);
@@ -2054,7 +2131,9 @@ void drawEditorPage(AppState& state) {
     drawFullscreenIconButton(state);
     drawText(state, L"Spacja  play/pause  •  ← →  ±5 s",
              {414, 731, 830, 753}, state.smallFormat.Get(), muted);
-    drawButton(state, editorSaveRect, L"Eksportuj nowy klip",
+    drawButton(state, editorSaveRect,
+               state.cutEditorSelection ? L"Wytnij i zapisz jeden klip"
+                                        : L"Eksportuj nowy klip",
                HitTarget::editorSave, true, state.editorDuration > 0.0);
 }
 
@@ -2439,6 +2518,7 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
     state.activeEditorAudioTrack = -1;
     state.editorAudioView = false;
     state.mergeEditorAudio = false;
+    state.cutEditorSelection = false;
     state.activeField = HitTarget::none;
     updateEditorVisibility(state);
     ShowWindow(state.videoWindow, SW_SHOW);
@@ -2878,19 +2958,30 @@ void exportEditor(const HWND window, AppState& state) {
         setStatus(window, state, L"Błąd: wpisz poprawną nazwę klipu");
         return;
     }
+    if (state.cutEditorSelection &&
+        state.editorDuration - (state.trimEnd - state.trimStart) < 0.1) {
+        setStatus(window, state, L"Błąd: nie można wyciąć całego klipu");
+        return;
+    }
     if (state.mediaPlayer != nullptr) state.mediaPlayer->Pause();
     state.playing = false;
-    setStatus(window, state, L"Eksportuję przycięty klip przez NVENC…");
+    setStatus(window, state,
+              state.cutEditorSelection
+                  ? L"Wycinam fragment i składam jeden klip przez NVENC…"
+                  : L"Eksportuję przycięty klip przez NVENC…");
     const auto input = state.selectedClip;
     const auto name = state.editorName;
     const double start = state.trimStart;
     const double end = state.trimEnd;
     const auto audioTracks = state.editorAudioTracks;
     const bool mergeAudio = state.mergeEditorAudio;
+    const bool cutSelection = state.cutEditorSelection;
+    const double fullDuration = state.editorDuration;
     state.editorJobs.emplace_back([window, input, name, start, end,
-                                   audioTracks, mergeAudio] {
+                                   audioTracks, mergeAudio, cutSelection, fullDuration] {
         auto* result = new EditorResult(
-            exportEditedClip(input, name, start, end, audioTracks, mergeAudio));
+            exportEditedClip(input, name, start, end, audioTracks, mergeAudio,
+                             cutSelection, fullDuration));
         if (!PostMessageW(window, editorDoneMessage, 0, reinterpret_cast<LPARAM>(result))) {
             delete result;
         }
@@ -2930,6 +3021,9 @@ void exportEditor(const HWND window, AppState& state) {
         if (editorAudioViewRect.contains(x, y)) return HitTarget::editorAudioView;
         if (state.editorAudioView && editorMergeAudioRect.contains(x, y)) {
             return HitTarget::editorMergeAudio;
+        }
+        if (editorCutModeRect.contains(x, y) && state.editorDuration > 0.2) {
+            return HitTarget::editorCutMode;
         }
         if (editorPlayRect.contains(x, y)) return HitTarget::editorPlay;
         if (editorFullscreenRect.contains(x, y)) return HitTarget::editorFullscreen;
@@ -3648,6 +3742,24 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
         return;
     case HitTarget::editorMergeAudio:
         state.mergeEditorAudio = !state.mergeEditorAudio;
+        InvalidateRect(window, nullptr, FALSE);
+        return;
+    case HitTarget::editorCutMode:
+        state.cutEditorSelection = !state.cutEditorSelection;
+        if (state.cutEditorSelection && state.editorDuration > 0.2 &&
+            state.trimStart <= 0.001 &&
+            state.trimEnd >= state.editorDuration - 0.001) {
+            const double center = std::clamp(
+                state.playPosition > 0.0 ? state.playPosition : state.editorDuration * 0.5,
+                0.1, state.editorDuration - 0.1);
+            const double halfWidth = std::min(1.0, state.editorDuration * 0.12);
+            state.trimStart = std::max(0.0, center - halfWidth);
+            state.trimEnd = std::min(state.editorDuration, center + halfWidth);
+        }
+        setStatus(window, state,
+                  state.cutEditorSelection
+                      ? L"Tryb wycinania: zaznacz fragment do usunięcia"
+                      : L"Tryb przycinania początku i końca klipu");
         InvalidateRect(window, nullptr, FALSE);
         return;
     case HitTarget::editorSave:
