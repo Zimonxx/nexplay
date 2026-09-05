@@ -24,7 +24,8 @@ NexPlay to lekka nagrywarka powtórek dla Windows, korzystająca ze sprzętowego
 - wbudowany odtwarzacz z przewijaniem, pełnym ekranem i skrótami klawiaturowymi,
 - kliknięcie obrazu zatrzymuje lub wznawia odtwarzanie,
 - menu kontekstowe klipów, zmiana nazwy i otwieranie lokalizacji pliku,
-- prosty edytor do bezstratnego przycinania początku i końca klipu,
+- prosty edytor do przycinania początku i końca klipu,
+- mikser edytora z wyciszaniem ścieżek, zakresem ich słyszalności i opcją połączenia w jedno audio,
 - ciemny, autorski interfejs AMOLED z animacjami i konfigurowalnym akcentem.
 
 ## Wymagania

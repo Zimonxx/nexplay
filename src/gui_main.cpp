@@ -22,6 +22,7 @@
 #include <memory>
 #include <semaphore>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -89,6 +90,8 @@ enum class HitTarget {
     editorSave,
     editorName,
     editorFullscreen,
+    editorAudioView,
+    editorMergeAudio,
     settingsPage,
     autostartToggle,
     autoBufferToggle,
@@ -99,7 +102,7 @@ enum class HitTarget {
     count,
 };
 
-enum class DragHandle { none, start, end, playhead };
+enum class DragHandle { none, start, end, playhead, audioStart, audioEnd };
 enum class HotkeyCapture { none, save, stop };
 enum class ColorDrag { none, plane, hue };
 
@@ -140,6 +143,8 @@ constexpr Rect bitrateFieldRect{838, 405, 1036, 455};
 constexpr Rect editorBackRect{260, 91, 344, 129};
 constexpr Rect editorPlayRect{284, 721, 334, 761};
 constexpr Rect editorFullscreenRect{346, 721, 396, 761};
+constexpr Rect editorAudioViewRect{870, 91, 1036, 129};
+constexpr Rect editorMergeAudioRect{814, 168, 1018, 198};
 constexpr Rect editorSaveRect{846, 721, 1036, 761};
 constexpr Rect editorNameRect{284, 604, 654, 648};
 constexpr Rect editorTimelineRect{284, 682, 1036, 700};
@@ -157,6 +162,14 @@ struct AudioRow final {
     bool included{true};
     bool groupSelected{};
     std::wstring groupName;
+};
+
+struct EditorAudioTrack final {
+    int streamIndex{};
+    std::wstring name;
+    bool included{true};
+    double start{};
+    double end{};
 };
 
 struct ClipPreview final {
@@ -227,6 +240,11 @@ struct AppState final {
     double playPosition{};
     double trimStart{};
     double trimEnd{};
+    std::vector<EditorAudioTrack> editorAudioTracks;
+    int editorAudioScroll{};
+    int activeEditorAudioTrack{-1};
+    bool editorAudioView{};
+    bool mergeEditorAudio{};
     DragHandle dragHandle{DragHandle::none};
     bool playing{};
     bool fullscreen{};
@@ -701,6 +719,57 @@ void savePersistentRecordingSettings(const AppState& state) {
     return output;
 }
 
+[[nodiscard]] std::wstring utf8ToWide(const std::string& text) {
+    if (text.empty()) return {};
+    const int size = MultiByteToWideChar(
+        CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
+    if (size <= 0) return {};
+    std::wstring result(static_cast<std::size_t>(size), L'\0');
+    MultiByteToWideChar(
+        CP_UTF8, 0, text.data(), static_cast<int>(text.size()), result.data(), size);
+    return result;
+}
+
+[[nodiscard]] std::vector<EditorAudioTrack> probeEditorAudioTracks(
+    const std::filesystem::path& clip) {
+    const std::string output = runHiddenProcessCapture({
+        L"ffprobe.exe", L"-v", L"error", L"-select_streams", L"a",
+        L"-show_entries", L"stream=index:stream_tags=handler_name,title",
+        L"-of", L"default=noprint_wrappers=0:nokey=0",
+        quoteProcessArgument(clip.wstring()),
+    });
+    std::vector<EditorAudioTrack> tracks;
+    std::istringstream lines(output);
+    std::string line;
+    int streamIndex = -1;
+    std::wstring name;
+    const auto finishTrack = [&] {
+        if (streamIndex < 0) return;
+        if (name.empty()) name = L"Ścieżka audio " + std::to_wstring(tracks.size() + 1);
+        tracks.push_back({.streamIndex = streamIndex, .name = std::move(name)});
+        streamIndex = -1;
+        name.clear();
+    };
+    while (std::getline(lines, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line == "[STREAM]") {
+            streamIndex = -1;
+            name.clear();
+        } else if (line == "[/STREAM]") {
+            finishTrack();
+        } else if (line.starts_with("index=")) {
+            try { streamIndex = std::stoi(line.substr(6)); }
+            catch (...) { streamIndex = -1; }
+        } else if (line.starts_with("TAG:handler_name=")) {
+            name = utf8ToWide(line.substr(17));
+        } else if (name.empty() && line.starts_with("TAG:title=")) {
+            name = utf8ToWide(line.substr(10));
+        }
+    }
+    finishTrack();
+    return tracks;
+}
+
 [[nodiscard]] std::wstring secondsArgument(const double seconds) {
     wchar_t text[32]{};
     swprintf_s(text, L"%.3f", seconds);
@@ -875,7 +944,9 @@ struct EditorResult final {
     const std::filesystem::path& input,
     std::wstring outputName,
     const double start,
-    const double end) {
+    const double end,
+    const std::vector<EditorAudioTrack>& audioTracks,
+    const bool mergeAudio) {
     if (!validClipName(outputName) || end - start < 0.1) {
         return {false, {}, L"Sprawdź nazwę oraz zakres przycięcia."};
     }
@@ -888,14 +959,78 @@ struct EditorResult final {
     const auto temporary = input.parent_path() /
         (L".nexplay-edit-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
          std::to_wstring(GetTickCount64()) + L".mp4");
-    const std::vector<std::wstring> arguments{
+    std::vector<std::wstring> arguments{
         L"ffmpeg.exe", L"-hide_banner", L"-loglevel", L"error", L"-y",
         L"-ss", secondsArgument(start), L"-i", quoteProcessArgument(input.wstring()),
-        L"-t", secondsArgument(end - start), L"-map", L"0",
-        L"-map_metadata", L"0", L"-c:v", L"h264_nvenc", L"-preset", L"p5",
-        L"-cq", L"18", L"-c:a", L"aac", L"-b:a", L"192k",
-        L"-movflags", L"+faststart", quoteProcessArgument(temporary.wstring()),
     };
+    const double duration = end - start;
+    std::vector<const EditorAudioTrack*> includedTracks;
+    for (const auto& track : audioTracks) {
+        if (track.included) includedTracks.push_back(&track);
+    }
+    if (audioTracks.empty()) {
+        arguments.insert(arguments.end(), {L"-map", L"0"});
+    } else {
+        std::wstring filters;
+        for (std::size_t index = 0; index < includedTracks.size(); ++index) {
+            const auto& track = *includedTracks[index];
+            const double audibleStart = std::clamp(track.start - start, 0.0, duration);
+            const double audibleEnd = std::clamp(track.end - start, 0.0, duration);
+            if (!filters.empty()) filters.push_back(L';');
+            filters += L"[0:" + std::to_wstring(track.streamIndex) +
+                L"]atrim=start=0:end=" + secondsArgument(duration) +
+                L",asetpts=PTS-STARTPTS,volume=0:enable='lt(t," +
+                secondsArgument(audibleStart) + L")+gte(t," +
+                secondsArgument(audibleEnd) + L")'[a" +
+                std::to_wstring(index) + L"]";
+        }
+        if (mergeAudio && includedTracks.size() > 1) {
+            if (!filters.empty()) filters.push_back(L';');
+            for (std::size_t index = 0; index < includedTracks.size(); ++index) {
+                filters += L"[a" + std::to_wstring(index) + L"]";
+            }
+            filters += L"amix=inputs=" + std::to_wstring(includedTracks.size()) +
+                L":duration=longest:dropout_transition=0:normalize=1[amix]";
+        }
+        if (!filters.empty()) {
+            arguments.insert(arguments.end(), {L"-filter_complex", filters});
+        }
+        arguments.insert(arguments.end(), {L"-map", L"0:v:0"});
+        if (mergeAudio && includedTracks.size() > 1) {
+            arguments.insert(arguments.end(), {L"-map", L"[amix]"});
+        } else {
+            for (std::size_t index = 0; index < includedTracks.size(); ++index) {
+                arguments.insert(arguments.end(), {
+                    L"-map", L"[a" + std::to_wstring(index) + L"]",
+                });
+            }
+        }
+        if (includedTracks.empty()) arguments.push_back(L"-an");
+    }
+    arguments.insert(arguments.end(), {
+        L"-map_metadata", L"0", L"-c:v", L"h264_nvenc", L"-preset", L"p5",
+        L"-cq", L"18",
+    });
+    if (!audioTracks.empty() && !includedTracks.empty()) {
+        arguments.insert(arguments.end(), {L"-c:a", L"aac", L"-b:a", L"192k"});
+        if (mergeAudio && includedTracks.size() > 1) {
+            arguments.insert(arguments.end(), {
+                L"-metadata:s:a:0", quoteProcessArgument(L"handler_name=NexPlay Mix"),
+            });
+        } else {
+            for (std::size_t index = 0; index < includedTracks.size(); ++index) {
+                arguments.push_back(L"-metadata:s:a:" + std::to_wstring(index));
+                arguments.push_back(quoteProcessArgument(
+                    L"handler_name=" + includedTracks[index]->name));
+            }
+        }
+    } else if (audioTracks.empty()) {
+        arguments.insert(arguments.end(), {L"-c:a", L"aac", L"-b:a", L"192k"});
+    }
+    arguments.insert(arguments.end(), {
+        L"-t", secondsArgument(duration), L"-movflags", L"+faststart",
+        quoteProcessArgument(temporary.wstring()),
+    });
     if (runHiddenProcess(arguments) != 0) {
         std::error_code cleanupError;
         std::filesystem::remove(temporary, cleanupError);
@@ -1780,8 +1915,94 @@ void drawEditorName(AppState& state) {
              state.bodyFormat.Get(), state.editorName.empty() ? muted : white);
 }
 
+[[nodiscard]] Rect editorAudioTimelineRect(const int visibleRow) {
+    const float top = 216.0F + static_cast<float>(visibleRow) * 64.0F;
+    return {520, top + 31, 1014, top + 43};
+}
+
+void drawEditorAudioPanel(AppState& state) {
+    drawText(state, L"Mikser ścieżek", {300, 171, 540, 200},
+             state.headingFormat.Get(), white);
+    drawText(state, L"Wycisz ścieżkę lub ustaw fragment, w którym ma być słyszalna.",
+             {300, 197, 730, 216}, state.smallFormat.Get(), muted);
+
+    const float mergeHover = hoverValue(state, HitTarget::editorMergeAudio);
+    D2D1_COLOR_F mergeFill = field;
+    mergeFill.r += primary.r * mergeHover * 0.05F;
+    mergeFill.g += primary.g * mergeHover * 0.05F;
+    mergeFill.b += primary.b * mergeHover * 0.05F;
+    fillRounded(state, editorMergeAudioRect, 10, mergeFill);
+    strokeRounded(state, editorMergeAudioRect, 10,
+                  state.mergeEditorAudio ? primary : border);
+    drawText(state, L"Połącz w jedno audio",
+             {editorMergeAudioRect.left + 12, editorMergeAudioRect.top + 8,
+              editorMergeAudioRect.right - 58, editorMergeAudioRect.bottom},
+             state.smallFormat.Get(), white);
+    drawToggle(state,
+               {editorMergeAudioRect.right - 48, editorMergeAudioRect.top + 5,
+                editorMergeAudioRect.right - 10, editorMergeAudioRect.bottom - 5},
+               state.mergeEditorAudio ? 1.0F : 0.0F);
+
+    constexpr int visibleTracks = 5;
+    state.editorAudioScroll = std::clamp(
+        state.editorAudioScroll, 0,
+        std::max(0, static_cast<int>(state.editorAudioTracks.size()) - visibleTracks));
+    for (int visible = 0; visible < visibleTracks; ++visible) {
+        const int index = state.editorAudioScroll + visible;
+        if (index >= static_cast<int>(state.editorAudioTracks.size())) break;
+        const auto& track = state.editorAudioTracks[static_cast<std::size_t>(index)];
+        const float top = 216.0F + static_cast<float>(visible) * 64.0F;
+        const Rect row{292, top, 1026, top + 56};
+        const bool hovered = state.mouseX >= row.left && state.mouseX <= row.right &&
+            state.mouseY >= row.top && state.mouseY <= row.bottom;
+        fillRounded(state, row, 9,
+                    hovered ? D2D1_COLOR_F{0.052F, 0.046F, 0.086F, 1}
+                            : D2D1_COLOR_F{0.032F, 0.033F, 0.047F, 1});
+        strokeRounded(state, row, 9, hovered ? D2D1_COLOR_F{primary.r, primary.g,
+                                                             primary.b, 0.25F}
+                                               : border);
+        drawCheckbox(state, {304, top + 10, 324, top + 30}, track.included);
+        drawText(state, track.name, {338, top + 9, 760, top + 31},
+                 state.bodyFormat.Get(), track.included ? white : muted);
+        drawText(state, track.included ? L"AKTYWNA" : L"WYCISZONA",
+                 {888, top + 10, 1008, top + 30}, state.smallFormat.Get(),
+                 track.included ? green : red);
+
+        const Rect timeline = editorAudioTimelineRect(visible);
+        const double duration = std::max(0.001, state.editorDuration);
+        const float startX = timeline.left +
+            static_cast<float>(track.start / duration) * (timeline.right - timeline.left);
+        const float endX = timeline.left +
+            static_cast<float>(track.end / duration) * (timeline.right - timeline.left);
+        fillRounded(state, timeline, 5, border);
+        if (track.included) {
+            D2D1_COLOR_F range = primary;
+            range.a = 0.78F;
+            fillRounded(state, {startX, timeline.top, endX, timeline.bottom}, 5, range);
+            state.brush->SetColor(white);
+            state.renderTarget->FillEllipse(
+                D2D1::Ellipse(D2D1::Point2F(startX, (timeline.top + timeline.bottom) * 0.5F),
+                              6, 6), state.brush.Get());
+            state.renderTarget->FillEllipse(
+                D2D1::Ellipse(D2D1::Point2F(endX, (timeline.top + timeline.bottom) * 0.5F),
+                              6, 6), state.brush.Get());
+        }
+        drawText(state, preciseTimeLabel(track.start),
+                 {338, top + 35, 430, top + 54}, state.smallFormat.Get(), muted);
+        drawText(state, preciseTimeLabel(track.end),
+                 {430, top + 35, 516, top + 54}, state.smallFormat.Get(), muted);
+    }
+    if (state.editorAudioTracks.empty()) {
+        drawCenteredText(state, L"Ten klip nie zawiera ścieżek audio.",
+                         {320, 320, 1000, 370}, state.bodyFormat.Get(), muted);
+    }
+}
+
 void drawEditorPage(AppState& state) {
     drawButton(state, editorBackRect, L"←  Wróć", HitTarget::editorBack, false);
+    drawButton(state, editorAudioViewRect,
+               state.editorAudioView ? L"Podgląd wideo" : L"Mikser audio",
+               HitTarget::editorAudioView, false);
     drawText(state, L"Edytor klipu", {366, 88, 650, 128}, state.titleFormat.Get(), white);
     drawText(state, L"Przytnij materiał i zapisz nową wersję bez naruszania oryginału.",
              {366, 126, 850, 150}, state.bodyFormat.Get(), muted);
@@ -1789,6 +2010,7 @@ void drawEditorPage(AppState& state) {
     drawGlow(state, {276, 151, 1044, 574}, 16, primary, 0.16F);
     fillRounded(state, {276, 151, 1044, 574}, 16, card);
     strokeRounded(state, {276, 151, 1044, 574}, 16, border);
+    if (state.editorAudioView) drawEditorAudioPanel(state);
 
     fillRounded(state, {260, 586, 1060, 778}, 16, card);
     strokeRounded(state, {260, 586, 1060, 778}, 16,
@@ -2055,7 +2277,8 @@ void updateEditorVisibility(AppState& state) {
         state.activeField = HitTarget::none;
     }
     if (state.videoWindow != nullptr) {
-        ShowWindow(state.videoWindow, state.page == Page::editor ? SW_SHOW : SW_HIDE);
+        ShowWindow(state.videoWindow,
+                   state.page == Page::editor && !state.editorAudioView ? SW_SHOW : SW_HIDE);
     }
 }
 
@@ -2211,6 +2434,11 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
     state.playPosition = 0;
     state.trimStart = 0;
     state.trimEnd = 0;
+    state.editorAudioTracks = probeEditorAudioTracks(clip);
+    state.editorAudioScroll = 0;
+    state.activeEditorAudioTrack = -1;
+    state.editorAudioView = false;
+    state.mergeEditorAudio = false;
     state.activeField = HitTarget::none;
     updateEditorVisibility(state);
     ShowWindow(state.videoWindow, SW_SHOW);
@@ -2245,6 +2473,9 @@ void updateEditorPlayback(AppState& state) {
         SUCCEEDED(player->GetDuration(MFP_POSITIONTYPE_100NS, &value))) {
         state.editorDuration = variantSeconds(value);
         state.trimEnd = state.editorDuration;
+        for (auto& track : state.editorAudioTracks) {
+            if (track.end <= 0.0) track.end = state.editorDuration;
+        }
     }
     PropVariantClear(&value);
     PropVariantInit(&value);
@@ -2308,6 +2539,27 @@ void moveTrimHandle(AppState& state, const float x) {
         seekEditor(state, state.trimEnd);
     } else if (state.dragHandle == DragHandle::playhead) {
         seekEditor(state, std::clamp(position, 0.0, state.editorDuration));
+    }
+}
+
+void moveEditorAudioHandle(AppState& state, const float x) {
+    if (state.editorDuration <= 0.0 || state.activeEditorAudioTrack < 0 ||
+        state.activeEditorAudioTrack >= static_cast<int>(state.editorAudioTracks.size())) return;
+    const int visible = state.activeEditorAudioTrack - state.editorAudioScroll;
+    if (visible < 0 || visible >= 5) return;
+    const Rect timeline = editorAudioTimelineRect(visible);
+    const double position = std::clamp(
+        static_cast<double>((x - timeline.left) / (timeline.right - timeline.left)) *
+            state.editorDuration,
+        0.0, state.editorDuration);
+    auto& track = state.editorAudioTracks[
+        static_cast<std::size_t>(state.activeEditorAudioTrack)];
+    if (state.dragHandle == DragHandle::audioStart) {
+        track.start = std::clamp(position, 0.0, std::max(0.0, track.end - 0.05));
+        seekEditor(state, track.start);
+    } else if (state.dragHandle == DragHandle::audioEnd) {
+        track.end = std::clamp(position, track.start + 0.05, state.editorDuration);
+        seekEditor(state, track.end);
     }
 }
 
@@ -2633,8 +2885,12 @@ void exportEditor(const HWND window, AppState& state) {
     const auto name = state.editorName;
     const double start = state.trimStart;
     const double end = state.trimEnd;
-    state.editorJobs.emplace_back([window, input, name, start, end] {
-        auto* result = new EditorResult(exportEditedClip(input, name, start, end));
+    const auto audioTracks = state.editorAudioTracks;
+    const bool mergeAudio = state.mergeEditorAudio;
+    state.editorJobs.emplace_back([window, input, name, start, end,
+                                   audioTracks, mergeAudio] {
+        auto* result = new EditorResult(
+            exportEditedClip(input, name, start, end, audioTracks, mergeAudio));
         if (!PostMessageW(window, editorDoneMessage, 0, reinterpret_cast<LPARAM>(result))) {
             delete result;
         }
@@ -2671,6 +2927,10 @@ void exportEditor(const HWND window, AppState& state) {
         return HitTarget::openClips;
     } else if (state.page == Page::editor) {
         if (editorBackRect.contains(x, y)) return HitTarget::editorBack;
+        if (editorAudioViewRect.contains(x, y)) return HitTarget::editorAudioView;
+        if (state.editorAudioView && editorMergeAudioRect.contains(x, y)) {
+            return HitTarget::editorMergeAudio;
+        }
         if (editorPlayRect.contains(x, y)) return HitTarget::editorPlay;
         if (editorFullscreenRect.contains(x, y)) return HitTarget::editorFullscreen;
         if (editorSaveRect.contains(x, y)) return HitTarget::editorSave;
@@ -3381,6 +3641,15 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
     case HitTarget::editorFullscreen:
         enterFullscreen(state);
         return;
+    case HitTarget::editorAudioView:
+        state.editorAudioView = !state.editorAudioView;
+        updateEditorVisibility(state);
+        InvalidateRect(window, nullptr, FALSE);
+        return;
+    case HitTarget::editorMergeAudio:
+        state.mergeEditorAudio = !state.mergeEditorAudio;
+        InvalidateRect(window, nullptr, FALSE);
+        return;
     case HitTarget::editorSave:
         exportEditor(window, state);
         return;
@@ -3426,7 +3695,15 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
         break;
     }
 
-    if (state.page == Page::replay && !state.engine.isRunning() &&
+    if (state.page == Page::editor && state.editorAudioView &&
+        x >= 292 && x <= 500 && y >= 216 && y < 536) {
+        const int index = static_cast<int>((y - 216) / 64) + state.editorAudioScroll;
+        if (index >= 0 && index < static_cast<int>(state.editorAudioTracks.size())) {
+            auto& track = state.editorAudioTracks[static_cast<std::size_t>(index)];
+            track.included = !track.included;
+            InvalidateRect(window, nullptr, FALSE);
+        }
+    } else if (state.page == Page::replay && !state.engine.isRunning() &&
         x >= 280 && x <= 1038 && y >= 574 && y < 754) {
         const int index = static_cast<int>((y - 574) / 36) + state.audioScroll;
         if (index >= 0 && index < static_cast<int>(state.audioRows.size())) {
@@ -3532,10 +3809,15 @@ LRESULT CALLBACK windowProcedure(
             ScreenToClient(window, &cursor);
             const float x = static_cast<float>(cursor.x);
             const float y = static_cast<float>(cursor.y);
+            const bool audioTimeline = state->page == Page::editor &&
+                state->editorAudioView && x >= 510 && x <= 1024 &&
+                y >= 216 && y < 536;
             const bool row =
                 (state->page == Page::replay && !state->engine.isRunning() &&
                  x >= 280 && x <= 1038 && y >= 574 && y < 754) ||
-                (state->page == Page::clips && clipsListRect.contains(x, y));
+                (state->page == Page::clips && clipsListRect.contains(x, y)) ||
+                (state->page == Page::editor && state->editorAudioView &&
+                 x >= 292 && x <= 500 && y >= 216 && y < 536);
             const HitTarget target = hitTest(*state, x, y);
             if (target == HitTarget::durationField || target == HitTarget::fpsField ||
                 target == HitTarget::bitrateField ||
@@ -3545,6 +3827,10 @@ LRESULT CALLBACK windowProcedure(
             }
             if (target == HitTarget::accentPlane || target == HitTarget::accentHue) {
                 SetCursor(LoadCursorW(nullptr, IDC_CROSS));
+                return TRUE;
+            }
+            if (audioTimeline) {
+                SetCursor(LoadCursorW(nullptr, IDC_SIZEWE));
                 return TRUE;
             }
             if (target != HitTarget::none || row) {
@@ -3563,7 +3849,12 @@ LRESULT CALLBACK windowProcedure(
                 updateAccentFromPointer(*state, state->mouseX, state->mouseY);
             }
             if (state->dragHandle != DragHandle::none) {
-                moveTrimHandle(*state, state->mouseX);
+                if (state->dragHandle == DragHandle::audioStart ||
+                    state->dragHandle == DragHandle::audioEnd) {
+                    moveEditorAudioHandle(*state, state->mouseX);
+                } else {
+                    moveTrimHandle(*state, state->mouseX);
+                }
             }
             const auto target = hitTest(*state, state->mouseX, state->mouseY);
             if (target != state->hover) {
@@ -3598,6 +3889,36 @@ LRESULT CALLBACK windowProcedure(
                 cancelHotkeyCapture(window, *state);
                 SetCapture(window);
                 updateAccentFromPointer(*state, x, y);
+                InvalidateRect(window, nullptr, FALSE);
+                return 0;
+            }
+        }
+        if (state != nullptr && state->page == Page::editor &&
+            state->editorAudioView && state->editorDuration > 0.0 &&
+            GET_X_LPARAM(lParam) >= 510 && GET_X_LPARAM(lParam) <= 1024 &&
+            GET_Y_LPARAM(lParam) >= 216 && GET_Y_LPARAM(lParam) < 536) {
+            const int visible = (GET_Y_LPARAM(lParam) - 216) / 64;
+            const int index = visible + state->editorAudioScroll;
+            if (index >= 0 && index < static_cast<int>(state->editorAudioTracks.size()) &&
+                state->editorAudioTracks[static_cast<std::size_t>(index)].included) {
+                const Rect timeline = editorAudioTimelineRect(visible);
+                const auto& track = state->editorAudioTracks[static_cast<std::size_t>(index)];
+                const float startX = timeline.left +
+                    static_cast<float>(track.start / state->editorDuration) *
+                        (timeline.right - timeline.left);
+                const float endX = timeline.left +
+                    static_cast<float>(track.end / state->editorDuration) *
+                        (timeline.right - timeline.left);
+                const float clickX = static_cast<float>(GET_X_LPARAM(lParam));
+                state->activeEditorAudioTrack = index;
+                state->dragHandle = std::abs(clickX - startX) <= std::abs(clickX - endX)
+                    ? DragHandle::audioStart : DragHandle::audioEnd;
+                if (IMFPMediaPlayer* player = activeEditorPlayer(*state); player != nullptr) {
+                    player->Pause();
+                }
+                state->playing = false;
+                SetCapture(window);
+                moveEditorAudioHandle(*state, clickX);
                 InvalidateRect(window, nullptr, FALSE);
                 return 0;
             }
@@ -3670,8 +3991,14 @@ LRESULT CALLBACK windowProcedure(
                 return 0;
             }
             if (state->dragHandle != DragHandle::none) {
-                moveTrimHandle(*state, static_cast<float>(GET_X_LPARAM(lParam)));
+                if (state->dragHandle == DragHandle::audioStart ||
+                    state->dragHandle == DragHandle::audioEnd) {
+                    moveEditorAudioHandle(*state, static_cast<float>(GET_X_LPARAM(lParam)));
+                } else {
+                    moveTrimHandle(*state, static_cast<float>(GET_X_LPARAM(lParam)));
+                }
                 state->dragHandle = DragHandle::none;
+                state->activeEditorAudioTrack = -1;
                 ReleaseCapture();
                 InvalidateRect(window, nullptr, FALSE);
                 return 0;
@@ -3769,7 +4096,9 @@ LRESULT CALLBACK windowProcedure(
         if (state != nullptr) {
             const int direction = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? -1 : 1;
             if (state->page == Page::replay) state->audioScroll += direction;
-            else state->clipScroll += direction;
+            else if (state->page == Page::editor && state->editorAudioView) {
+                state->editorAudioScroll += direction;
+            } else state->clipScroll += direction;
             InvalidateRect(window, nullptr, FALSE);
         }
         return 0;
