@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <set>
 #include <string>
 #include <thread>
@@ -20,6 +21,7 @@ struct RecorderSettings {
     std::uint32_t outputHeight{};
     bool captureMicrophone{true};
     std::set<DWORD> excludedProcessIds;
+    std::map<DWORD, std::wstring> groupedProcessNames;
 };
 
 using StatusCallback = std::function<void(std::wstring)>;

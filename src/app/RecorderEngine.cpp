@@ -16,6 +16,7 @@
 #include <iomanip>
 #include <iostream>
 #include <locale>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -40,13 +41,24 @@ struct ComApartment final {
 
 struct ActiveAudioTrack final {
     std::wstring name;
+    std::wstring outputId;
     std::unique_ptr<storage::PcmSegmentBuffer> buffer;
     std::unique_ptr<audio::PcmAudioCapture> capture;
 };
 
+struct StagedAudioInput final {
+    storage::StagedPcmTrack track;
+    std::wstring outputId;
+};
+
 struct StagedAvReplay final {
     storage::StagedReplay video;
-    std::vector<storage::StagedPcmTrack> audioTracks;
+    std::vector<StagedAudioInput> audioInputs;
+};
+
+struct MuxedAudioTrack final {
+    std::wstring name;
+    std::vector<std::size_t> inputs;
 };
 
 [[nodiscard]] std::filesystem::path clipsDirectory() {
@@ -186,12 +198,24 @@ void saveStagedReplay(
         concatenateFiles(staged.video.segments, rawVideoPath);
 
         std::vector<std::filesystem::path> rawAudioPaths;
-        rawAudioPaths.reserve(staged.audioTracks.size());
-        for (std::size_t index = 0; index < staged.audioTracks.size(); ++index) {
+        rawAudioPaths.reserve(staged.audioInputs.size());
+        for (std::size_t index = 0; index < staged.audioInputs.size(); ++index) {
             const auto path = staged.video.directory /
                 (L"combined-audio-" + std::to_wstring(index) + L".pcm");
-            concatenateFiles(staged.audioTracks[index].segments, path);
+            concatenateFiles(staged.audioInputs[index].track.segments, path);
             rawAudioPaths.push_back(path);
+        }
+
+        std::vector<MuxedAudioTrack> outputTracks;
+        std::map<std::wstring, std::size_t> outputTrackIndices;
+        for (std::size_t index = 0; index < staged.audioInputs.size(); ++index) {
+            const auto& input = staged.audioInputs[index];
+            const auto [position, inserted] = outputTrackIndices.emplace(
+                input.outputId, outputTracks.size());
+            if (inserted) {
+                outputTracks.push_back({.name = input.track.name});
+            }
+            outputTracks[position->second].inputs.push_back(index);
         }
 
         const auto outputPath = destinationDirectory /
@@ -201,27 +225,45 @@ void saveStagedReplay(
             L"-r", std::to_wstring(framesPerSecond), L"-i",
             quoteSpawnArgument(rawVideoPath.wstring()),
         };
-        for (std::size_t index = 0; index < staged.audioTracks.size(); ++index) {
-            const auto& format = staged.audioTracks[index].format;
+        for (std::size_t index = 0; index < staged.audioInputs.size(); ++index) {
+            const auto& format = staged.audioInputs[index].track.format;
             arguments.insert(arguments.end(), {
                 L"-f", L"s16le", L"-ar", std::to_wstring(format.sampleRate),
                 L"-ac", std::to_wstring(format.channels), L"-i",
                 quoteSpawnArgument(rawAudioPaths[index].wstring()),
             });
         }
+
+        std::wstring audioFilters;
+        for (std::size_t outputIndex = 0; outputIndex < outputTracks.size(); ++outputIndex) {
+            const auto& output = outputTracks[outputIndex];
+            if (output.inputs.size() < 2) continue;
+            if (!audioFilters.empty()) audioFilters.push_back(L';');
+            for (const std::size_t input : output.inputs) {
+                audioFilters += L"[" + std::to_wstring(input + 1) + L":a:0]";
+            }
+            audioFilters += L"amix=inputs=" + std::to_wstring(output.inputs.size()) +
+                L":duration=longest:dropout_transition=0:normalize=1[aout" +
+                std::to_wstring(outputIndex) + L"]";
+        }
+        if (!audioFilters.empty()) {
+            arguments.insert(arguments.end(), {L"-filter_complex", audioFilters});
+        }
         arguments.insert(arguments.end(), {L"-map", L"0:v:0"});
-        for (std::size_t index = 0; index < staged.audioTracks.size(); ++index) {
-            arguments.insert(arguments.end(), {
-                L"-map", std::to_wstring(index + 1) + L":a:0",
-            });
+        for (std::size_t index = 0; index < outputTracks.size(); ++index) {
+            const auto& output = outputTracks[index];
+            const std::wstring source = output.inputs.size() == 1
+                ? std::to_wstring(output.inputs.front() + 1) + L":a:0"
+                : L"[aout" + std::to_wstring(index) + L"]";
+            arguments.insert(arguments.end(), {L"-map", source});
         }
         arguments.insert(arguments.end(), {L"-c:v", L"copy"});
-        if (!staged.audioTracks.empty()) {
+        if (!outputTracks.empty()) {
             arguments.insert(arguments.end(), {L"-c:a", L"aac", L"-b:a", L"192k"});
-            for (std::size_t index = 0; index < staged.audioTracks.size(); ++index) {
+            for (std::size_t index = 0; index < outputTracks.size(); ++index) {
                 arguments.push_back(L"-metadata:s:a:" + std::to_wstring(index));
                 arguments.push_back(quoteSpawnArgument(
-                    L"handler_name=" + staged.audioTracks[index].name));
+                    L"handler_name=" + outputTracks[index].name));
             }
         }
         arguments.insert(arguments.end(), {
@@ -257,7 +299,14 @@ void saveStagedReplay(
         }
         try {
             auto track = std::make_unique<ActiveAudioTrack>();
-            track->name = application.name;
+            if (const auto group = settings.groupedProcessNames.find(application.processId);
+                group != settings.groupedProcessNames.end() && !group->second.empty()) {
+                track->name = group->second;
+                track->outputId = L"group:" + group->second;
+            } else {
+                track->name = application.name;
+                track->outputId = L"process:" + std::to_wstring(application.processId);
+            }
             track->buffer = std::make_unique<storage::PcmSegmentBuffer>(
                 sessionDirectory,
                 L"process-" + std::to_wstring(application.processId),
@@ -280,6 +329,7 @@ void saveStagedReplay(
         try {
             auto microphone = std::make_unique<ActiveAudioTrack>();
             microphone->name = L"Microphone";
+            microphone->outputId = L"microphone";
             microphone->buffer = std::make_unique<storage::PcmSegmentBuffer>(
                 sessionDirectory, L"microphone", settings.bufferDuration);
             microphone->capture = std::make_unique<audio::PcmAudioCapture>();
@@ -308,6 +358,13 @@ void stopAudioTracks(std::vector<std::unique_ptr<ActiveAudioTrack>>& tracks) noe
         } catch (...) {
         }
     }
+}
+
+[[nodiscard]] std::size_t outputAudioTrackCount(
+    const std::vector<std::unique_ptr<ActiveAudioTrack>>& tracks) {
+    std::set<std::wstring> outputs;
+    for (const auto& track : tracks) outputs.insert(track->outputId);
+    return outputs.size();
 }
 
 } // namespace
@@ -390,7 +447,7 @@ void RecorderEngine::run(
         if (statusCallback) {
             statusCallback(
                 L"Bufor działa — użyj skrótu zapisu klipu. Ścieżki audio: " +
-                std::to_wstring(audioTracks.size()));
+                std::to_wstring(outputAudioTrackCount(audioTracks)));
         }
 
         auto nextFrame = std::chrono::steady_clock::now();
@@ -410,8 +467,11 @@ void RecorderEngine::run(
                             continue;
                         }
                         try {
-                            staged.audioTracks.push_back(track->buffer->stageLatest(
-                                staged.video.directory, track->name, index));
+                            staged.audioInputs.push_back({
+                                .track = track->buffer->stageLatest(
+                                    staged.video.directory, track->name, index),
+                                .outputId = track->outputId,
+                            });
                         } catch (...) {
                         }
                     }
@@ -434,7 +494,7 @@ void RecorderEngine::run(
                 if (statusCallback) {
                     statusCallback(
                         L"Bufor wyzerowany. Nowe ścieżki audio: " +
-                        std::to_wstring(audioTracks.size()));
+                        std::to_wstring(outputAudioTrackCount(audioTracks)));
                 }
             }
 

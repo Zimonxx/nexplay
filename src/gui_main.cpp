@@ -75,6 +75,10 @@ enum class HitTarget {
     save,
     refreshAudio,
     microphone,
+    createAudioGroup,
+    audioGroupName,
+    confirmAudioGroup,
+    cancelAudioGroup,
     openClips,
     durationField,
     resolutionField,
@@ -122,6 +126,11 @@ constexpr Rect startRect{284, 222, 458, 262};
 constexpr Rect saveRect{470, 222, 644, 262};
 constexpr Rect refreshRect{967, 508, 1050, 542};
 constexpr Rect microphoneRect{760, 508, 946, 542};
+constexpr Rect createAudioGroupRect{644, 508, 748, 542};
+constexpr Rect audioGroupDialogRect{404, 254, 916, 500};
+constexpr Rect audioGroupNameRect{444, 350, 876, 398};
+constexpr Rect cancelAudioGroupRect{624, 430, 738, 470};
+constexpr Rect confirmAudioGroupRect{750, 430, 876, 470};
 constexpr Rect openClipsRect{900, 91, 1060, 129};
 constexpr Rect clipsListRect{260, 162, 1060, 746};
 constexpr Rect durationFieldRect{284, 405, 464, 455};
@@ -146,6 +155,8 @@ struct AudioRow final {
     DWORD processId{};
     std::wstring name;
     bool included{true};
+    bool groupSelected{};
+    std::wstring groupName;
 };
 
 struct ClipPreview final {
@@ -198,6 +209,8 @@ struct AppState final {
     std::map<std::filesystem::path, int> thumbnailDesiredFrame;
     std::map<std::filesystem::path, std::shared_ptr<ClipPreview>> thumbnailMemory;
     int audioScroll{};
+    bool audioGroupDialogOpen{};
+    std::wstring audioGroupName;
     int clipScroll{};
     bool microphone{true};
     HitTarget activeField{HitTarget::none};
@@ -844,6 +857,28 @@ void requestThumbnail(
         name.back() != L'.' && name.back() != L' ';
 }
 
+[[nodiscard]] bool validAudioGroupName(const std::wstring& name) {
+    return !name.empty() && name.size() <= 48 && validClipName(name);
+}
+
+[[nodiscard]] std::size_t selectedAudioRowCount(const AppState& state) {
+    return static_cast<std::size_t>(std::ranges::count_if(
+        state.audioRows, [](const AudioRow& row) { return row.groupSelected; }));
+}
+
+[[nodiscard]] std::wstring selectedExistingAudioGroup(const AppState& state) {
+    std::wstring group;
+    std::size_t selected{};
+    for (const auto& row : state.audioRows) {
+        if (!row.groupSelected) continue;
+        ++selected;
+        if (row.groupName.empty()) return {};
+        if (group.empty()) group = row.groupName;
+        else if (group != row.groupName) return {};
+    }
+    return selected >= 2 ? group : std::wstring{};
+}
+
 struct EditorResult final {
     bool success{};
     std::filesystem::path output;
@@ -1302,6 +1337,74 @@ void drawStatusChip(AppState& state) {
              {947, 100, 1052, 124}, state.smallFormat.Get(), running ? green : muted);
 }
 
+void drawAudioGroupSelector(
+    AppState& state, const Rect rectangle, const bool selected, const bool enabled) {
+    D2D1_COLOR_F selectorColor = selected ? primary : field;
+    if (!enabled) selectorColor.a = 0.36F;
+    if (selected && enabled) drawGlow(state, rectangle, 7, primary, 0.34F);
+    fillRounded(state, rectangle, 7, selectorColor);
+    strokeRounded(state, rectangle, 7, selected ? primaryHover : border);
+
+    D2D1_COLOR_F iconColor = selected ? white : muted;
+    if (!enabled) iconColor.a = 0.34F;
+    state.brush->SetColor(iconColor);
+    state.renderTarget->DrawRoundedRectangle(
+        D2D1::RoundedRect(
+            D2D1::RectF(rectangle.left + 4, rectangle.top + 7,
+                        rectangle.left + 12, rectangle.bottom - 5), 4, 4),
+        state.brush.Get(), 1.4F);
+    state.renderTarget->DrawRoundedRectangle(
+        D2D1::RoundedRect(
+            D2D1::RectF(rectangle.right - 12, rectangle.top + 5,
+                        rectangle.right - 4, rectangle.bottom - 7), 4, 4),
+        state.brush.Get(), 1.4F);
+    state.renderTarget->DrawLine(
+        D2D1::Point2F(rectangle.left + 10, rectangle.bottom - 7),
+        D2D1::Point2F(rectangle.right - 10, rectangle.top + 7),
+        state.brush.Get(), 1.4F);
+}
+
+void drawAudioGroupDialog(AppState& state) {
+    if (!state.audioGroupDialogOpen) return;
+    state.brush->SetColor(D2D1_COLOR_F{0, 0, 0, 0.78F});
+    state.renderTarget->FillRectangle(
+        D2D1::RectF(220, 64, windowWidth, windowHeight), state.brush.Get());
+
+    drawGlow(state, audioGroupDialogRect, 18, primary, 0.42F);
+    fillRounded(state, audioGroupDialogRect, 18,
+                D2D1_COLOR_F{0.018F, 0.019F, 0.028F, 1});
+    D2D1_COLOR_F dialogBorder = primary;
+    dialogBorder.a = 0.34F;
+    strokeRounded(state, audioGroupDialogRect, 18, dialogBorder);
+    drawText(state, L"Nowa grupa audio", {444, 282, 780, 316},
+             state.headingFormat.Get(), white);
+    drawText(state,
+             L"Wybrane aplikacje zostaną zmiksowane do jednej ścieżki o tej nazwie.",
+             {444, 317, 876, 342}, state.smallFormat.Get(), muted);
+
+    fillRounded(state, audioGroupNameRect, 10, field);
+    strokeRounded(state, audioGroupNameRect, 10,
+                  state.activeField == HitTarget::audioGroupName ? primary : border);
+    if (state.activeField == HitTarget::audioGroupName) {
+        drawGlow(state, audioGroupNameRect, 10, primary, 0.46F);
+    }
+    const std::wstring shown = state.audioGroupName.empty()
+        ? L"np. FiveM" : state.audioGroupName;
+    drawText(state, shown,
+             {audioGroupNameRect.left + 14, audioGroupNameRect.top + 13,
+              audioGroupNameRect.right - 14, audioGroupNameRect.bottom - 8},
+             state.bodyFormat.Get(), state.audioGroupName.empty() ? muted : white);
+    drawText(state, L"NAZWA ŚCIEŻKI", {audioGroupNameRect.left, 327,
+                                       audioGroupNameRect.right, 349},
+             state.smallFormat.Get(), muted);
+
+    drawButton(state, cancelAudioGroupRect, L"Anuluj",
+               HitTarget::cancelAudioGroup, false);
+    drawButton(state, confirmAudioGroupRect, L"Utwórz grupę",
+               HitTarget::confirmAudioGroup, true,
+               validAudioGroupName(state.audioGroupName));
+}
+
 void drawReplayPage(AppState& state) {
     const bool running = state.engine.isRunning();
     const auto& resolution = resolutionPresets[state.resolutionPreset];
@@ -1361,8 +1464,15 @@ void drawReplayPage(AppState& state) {
     fillRounded(state, {260, 490, 1060, 770}, 16, card);
     strokeRounded(state, {260, 490, 1060, 770}, 16, D2D1_COLOR_F{0.080F, 0.082F, 0.115F, 1});
     drawText(state, L"Źródła audio", {284, 509, 520, 537}, state.headingFormat.Get(), white);
-    drawText(state, L"Każde źródło zostanie zapisane jako osobna ścieżka.",
-             {284, 539, 690, 561}, state.smallFormat.Get(), muted);
+    drawText(state, L"Zaznacz ogniwa przy aplikacjach, aby połączyć je w jedną ścieżkę.",
+             {284, 539, 754, 561}, state.smallFormat.Get(), muted);
+    const std::size_t selectedForGroup = selectedAudioRowCount(state);
+    const std::wstring existingGroup = selectedExistingAudioGroup(state);
+    const std::wstring groupButtonLabel = !existingGroup.empty()
+        ? L"Rozłącz" : L"Połącz (" + std::to_wstring(selectedForGroup) + L")";
+    drawButton(state, createAudioGroupRect, groupButtonLabel,
+               HitTarget::createAudioGroup, false,
+               !running && selectedForGroup >= 2);
     drawText(state, L"Mikrofon", {774, 516, 846, 538}, state.smallFormat.Get(),
              running ? muted : white);
     drawToggle(state, {898, 514, 938, 536}, state.microphoneAnimation);
@@ -1386,10 +1496,22 @@ void drawReplayPage(AppState& state) {
                                    : D2D1_COLOR_F{0.036F, 0.038F, 0.053F, 1});
         }
         drawCheckbox(state, {294, top + 6, 314, top + 26}, row.included);
-        drawText(state, row.name, {330, top + 7, 840, top + 29}, state.bodyFormat.Get(),
+        drawText(state, row.name, {330, top + 7, 666, top + 29}, state.bodyFormat.Get(),
                  row.included ? white : muted);
-        drawText(state, L"PID " + std::to_wstring(row.processId),
-                 {875, top + 8, 1018, top + 29}, state.smallFormat.Get(), muted);
+        if (!row.groupName.empty()) {
+            D2D1_COLOR_F groupFill = primary;
+            groupFill.a = row.included ? 0.14F : 0.06F;
+            fillRounded(state, {680, top + 5, 958, top + 27}, 7, groupFill);
+            D2D1_COLOR_F groupText = row.included ? primaryHover : muted;
+            drawText(state, L"GRUPA  ·  " + row.groupName,
+                     {690, top + 8, 948, top + 27},
+                     state.smallFormat.Get(), groupText);
+        } else {
+            drawText(state, L"PID " + std::to_wstring(row.processId),
+                     {822, top + 8, 958, top + 29}, state.smallFormat.Get(), muted);
+        }
+        drawAudioGroupSelector(
+            state, {978, top + 5, 1002, top + 27}, row.groupSelected, !running);
     }
     if (state.audioRows.size() > visibleRows) {
         fillRounded(state, {1044, 574, 1047, 754}, 2, border);
@@ -1536,8 +1658,8 @@ void drawClipsPage(AppState& state) {
                  {left + 14, top + 216, left + 268, top + 239},
                   state.bodyFormat.Get(), white);
         const std::wstring details = clip.preview != nullptr && clip.preview->duration > 0.0
-            ? timeLabel(clip.preview->duration) + L"  •  MP4  •  osobne audio"
-            : L"MP4  •  osobne ścieżki audio";
+            ? timeLabel(clip.preview->duration) + L"  •  MP4  •  wiele ścieżek audio"
+            : L"MP4  •  ścieżki audio";
         drawText(state, details, {left + 14, top + 238, left + 280, top + 256},
                   state.smallFormat.Get(), muted);
         drawText(state, sizeLabel(clip.size),
@@ -1664,7 +1786,7 @@ void drawEditorPage(AppState& state) {
     drawText(state, L"NAZWA NOWEGO PLIKU", {284, 580, 650, 604}, state.smallFormat.Get(), muted);
     drawEditorName(state);
     drawText(state, L".mp4", {664, 617, 714, 644}, state.bodyFormat.Get(), muted);
-    drawText(state, L"Wszystkie osobne ścieżki audio zostaną zachowane.",
+    drawText(state, L"Wszystkie ścieżki audio zostaną zachowane.",
              {730, 617, 1036, 642}, state.smallFormat.Get(), muted);
     drawText(state,
              L"Kliknij pasek, aby przewinąć  •  przeciągnij biały uchwyt, aby przyciąć",
@@ -1907,6 +2029,7 @@ void paint(const HWND window, AppState& state) {
         else if (state.page == Page::editor) drawEditorPage(state);
         else drawSettingsPage(state);
         drawClipContextMenu(state);
+        drawAudioGroupDialog(state);
         if (state.renderTarget->EndDraw() == D2DERR_RECREATE_TARGET) {
             state.renderTarget.Reset();
             state.brush.Reset();
@@ -1935,13 +2058,18 @@ void setStatus(const HWND window, AppState& state, std::wstring text) {
 }
 
 void refreshAudioApplications(const HWND window, AppState& state) {
-    std::map<DWORD, bool> previous;
-    for (const auto& row : state.audioRows) previous[row.processId] = row.included;
+    std::map<DWORD, AudioRow> previous;
+    for (const auto& row : state.audioRows) previous[row.processId] = row;
     state.audioRows.clear();
     for (const auto& application : nexplay::audio::activeAudioApplications()) {
         const auto selection = previous.find(application.processId);
-        state.audioRows.push_back({application.processId, application.name,
-            selection == previous.end() || selection->second});
+        AudioRow row{.processId = application.processId, .name = application.name};
+        if (selection != previous.end()) {
+            row.included = selection->second.included;
+            row.groupSelected = selection->second.groupSelected;
+            row.groupName = selection->second.groupName;
+        }
+        state.audioRows.push_back(std::move(row));
     }
     state.audioScroll = 0;
     setStatus(window, state,
@@ -2437,6 +2565,9 @@ LRESULT CALLBACK fullscreenWindowProcedure(
     settings.captureMicrophone = state.microphone;
     for (const auto& row : state.audioRows) {
         if (!row.included) settings.excludedProcessIds.insert(row.processId);
+        else if (!row.groupName.empty()) {
+            settings.groupedProcessNames.emplace(row.processId, row.groupName);
+        }
     }
     return settings;
 }
@@ -2502,6 +2633,15 @@ void exportEditor(const HWND window, AppState& state) {
 }
 
 [[nodiscard]] HitTarget hitTest(const AppState& state, const float x, const float y) {
+    if (state.audioGroupDialogOpen) {
+        if (audioGroupNameRect.contains(x, y)) return HitTarget::audioGroupName;
+        if (cancelAudioGroupRect.contains(x, y)) return HitTarget::cancelAudioGroup;
+        if (confirmAudioGroupRect.contains(x, y) &&
+            validAudioGroupName(state.audioGroupName)) {
+            return HitTarget::confirmAudioGroup;
+        }
+        return HitTarget::none;
+    }
     if (minimizeRect.contains(x, y)) return HitTarget::minimize;
     if (closeRect.contains(x, y)) return HitTarget::close;
     if (replayNavRect.contains(x, y)) return HitTarget::replayPage;
@@ -2512,6 +2652,8 @@ void exportEditor(const HWND window, AppState& state) {
         if (saveRect.contains(x, y) && state.engine.isRunning()) return HitTarget::save;
         if (refreshRect.contains(x, y) && !state.engine.isRunning()) return HitTarget::refreshAudio;
         if (microphoneRect.contains(x, y) && !state.engine.isRunning()) return HitTarget::microphone;
+        if (createAudioGroupRect.contains(x, y) && !state.engine.isRunning() &&
+            selectedAudioRowCount(state) >= 2) return HitTarget::createAudioGroup;
         if (!state.engine.isRunning() && durationFieldRect.contains(x, y)) return HitTarget::durationField;
         if (!state.engine.isRunning() && resolutionFieldRect.contains(x, y)) return HitTarget::resolutionField;
         if (!state.engine.isRunning() && fpsFieldRect.contains(x, y)) return HitTarget::fpsField;
@@ -3099,8 +3241,29 @@ void updateAccentFromPointer(AppState& state, const float x, const float y) {
     applyAccentColor(state);
 }
 
+void closeAudioGroupDialog(AppState& state) {
+    state.audioGroupDialogOpen = false;
+    state.audioGroupName.clear();
+    state.activeField = HitTarget::none;
+    state.replaceFieldOnInput = false;
+}
+
+void confirmAudioGroup(const HWND window, AppState& state) {
+    if (!validAudioGroupName(state.audioGroupName) ||
+        selectedAudioRowCount(state) < 2) return;
+    const std::wstring groupName = state.audioGroupName;
+    for (auto& row : state.audioRows) {
+        if (!row.groupSelected) continue;
+        row.groupName = groupName;
+        row.groupSelected = false;
+    }
+    closeAudioGroupDialog(state);
+    setStatus(window, state, L"Utworzono ścieżkę audio: " + groupName);
+}
+
 void handleClick(const HWND window, AppState& state, const float x, const float y) {
     const HitTarget clicked = hitTest(state, x, y);
+    if (state.audioGroupDialogOpen && clicked == HitTarget::none) return;
     if (state.hotkeyCapture != HotkeyCapture::none &&
         clicked != HitTarget::saveHotkey && clicked != HitTarget::stopHotkey) {
         cancelHotkeyCapture(window, state);
@@ -3142,6 +3305,39 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
         return;
     case HitTarget::microphone:
         state.microphone = !state.microphone;
+        InvalidateRect(window, nullptr, FALSE);
+        return;
+    case HitTarget::createAudioGroup: {
+        const std::wstring existingGroup = selectedExistingAudioGroup(state);
+        if (!existingGroup.empty()) {
+            for (auto& row : state.audioRows) {
+                if (row.groupSelected) {
+                    row.groupName.clear();
+                    row.groupSelected = false;
+                }
+            }
+            setStatus(window, state, L"Rozłączono grupę audio: " + existingGroup);
+        } else {
+            state.audioGroupDialogOpen = true;
+            state.audioGroupName.clear();
+            state.activeField = HitTarget::audioGroupName;
+            state.replaceFieldOnInput = false;
+            SetFocus(window);
+            InvalidateRect(window, nullptr, FALSE);
+        }
+        return;
+    }
+    case HitTarget::audioGroupName:
+        state.activeField = HitTarget::audioGroupName;
+        state.replaceFieldOnInput = false;
+        SetFocus(window);
+        InvalidateRect(window, nullptr, FALSE);
+        return;
+    case HitTarget::confirmAudioGroup:
+        confirmAudioGroup(window, state);
+        return;
+    case HitTarget::cancelAudioGroup:
+        closeAudioGroupDialog(state);
         InvalidateRect(window, nullptr, FALSE);
         return;
     case HitTarget::durationField:
@@ -3226,7 +3422,20 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
         const int index = static_cast<int>((y - 574) / 36) + state.audioScroll;
         if (index >= 0 && index < static_cast<int>(state.audioRows.size())) {
             auto& row = state.audioRows[static_cast<std::size_t>(index)];
-            row.included = !row.included;
+            if (x >= 964) {
+                if (!row.groupName.empty()) {
+                    const bool select = !row.groupSelected;
+                    for (auto& candidate : state.audioRows) {
+                        if (candidate.groupName == row.groupName) {
+                            candidate.groupSelected = select;
+                        }
+                    }
+                } else {
+                    row.groupSelected = !row.groupSelected;
+                }
+            } else {
+                row.included = !row.included;
+            }
             InvalidateRect(window, nullptr, FALSE);
         }
     } else if (const int index = clipIndexAt(state, x, y); index >= 0) {
@@ -3240,6 +3449,7 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
     case HitTarget::fpsField: return &state.fpsText;
     case HitTarget::bitrateField: return &state.bitrateText;
     case HitTarget::editorName: return &state.editorName;
+    case HitTarget::audioGroupName: return &state.audioGroupName;
     default: return nullptr;
     }
 }
@@ -3319,7 +3529,8 @@ LRESULT CALLBACK windowProcedure(
                 (state->page == Page::clips && clipsListRect.contains(x, y));
             const HitTarget target = hitTest(*state, x, y);
             if (target == HitTarget::durationField || target == HitTarget::fpsField ||
-                target == HitTarget::bitrateField) {
+                target == HitTarget::bitrateField ||
+                target == HitTarget::audioGroupName) {
                 SetCursor(LoadCursorW(nullptr, IDC_IBEAM));
                 return TRUE;
             }
@@ -3464,7 +3675,8 @@ LRESULT CALLBACK windowProcedure(
         if (state != nullptr &&
             (!state->engine.isRunning() || state->activeField == HitTarget::editorName)) {
             if (auto* text = activeFieldText(*state); text != nullptr) {
-                const bool nameField = state->activeField == HitTarget::editorName;
+                const bool nameField = state->activeField == HitTarget::editorName ||
+                    state->activeField == HitTarget::audioGroupName;
                 const bool validNameCharacter = nameField && wParam >= 32 &&
                     std::wstring(L"<>:\"/\\|?*").find(static_cast<wchar_t>(wParam)) == std::wstring::npos;
                 if ((nameField && validNameCharacter) ||
@@ -3473,12 +3685,16 @@ LRESULT CALLBACK windowProcedure(
                         text->clear();
                         state->replaceFieldOnInput = false;
                     }
-                    const std::size_t maximumLength = nameField ? 100 : 4;
+                    const std::size_t maximumLength = state->activeField == HitTarget::audioGroupName
+                        ? 48 : (nameField ? 100 : 4);
                     if (text->size() < maximumLength) text->push_back(static_cast<wchar_t>(wParam));
                 } else if (wParam == L'\b') {
                     state->replaceFieldOnInput = false;
                     if (!text->empty()) text->pop_back();
-                } else if (wParam == L'\r' || wParam == L'\t') {
+                } else if (wParam == L'\r') {
+                    if (state->audioGroupDialogOpen) confirmAudioGroup(window, *state);
+                    else state->activeField = HitTarget::none;
+                } else if (wParam == L'\t') {
                     state->activeField = HitTarget::none;
                 }
                 InvalidateRect(window, nullptr, FALSE);
@@ -3500,6 +3716,18 @@ LRESULT CALLBACK windowProcedure(
                 }
                 InvalidateRect(window, nullptr, FALSE);
                 return 0;
+            }
+            if (state->audioGroupDialogOpen) {
+                if (wParam == VK_ESCAPE) {
+                    closeAudioGroupDialog(*state);
+                    InvalidateRect(window, nullptr, FALSE);
+                    return 0;
+                }
+                if (wParam == VK_RETURN) {
+                    confirmAudioGroup(window, *state);
+                    InvalidateRect(window, nullptr, FALSE);
+                    return 0;
+                }
             }
             if (state->page == Page::editor &&
                 state->activeField != HitTarget::editorName) {

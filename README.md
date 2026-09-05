@@ -14,6 +14,7 @@ NexPlay to lekka nagrywarka powtórek dla Windows, korzystająca ze sprzętowego
 - bufor powtórek przechowywany w katalogu tymczasowym systemu,
 - zapis klipu i wyzerowanie bufora jednym globalnym skrótem,
 - oddzielna ścieżka audio dla każdej aktywnej aplikacji oraz mikrofonu,
+- łączenie wybranych aplikacji w jedną nazwaną ścieżkę audio,
 - możliwość wykluczania wybranych aplikacji i mikrofonu z nagrania,
 - globalne skróty działające również wtedy, gdy NexPlay jest aktywnym oknem,
 - zmiana skrótów i koloru akcentu w ustawieniach,
