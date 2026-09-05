@@ -158,6 +158,45 @@ constexpr Rect accentPlaneRect{292, 590, 800, 684};
 constexpr Rect accentHueRect{818, 590, 846, 684};
 constexpr Rect accentPreviewRect{870, 590, 1028, 684};
 
+struct DesignViewport final {
+    float scale{1.0F};
+    float offsetX{};
+    float offsetY{};
+};
+
+[[nodiscard]] DesignViewport designViewport(const HWND window) {
+    RECT client{};
+    GetClientRect(window, &client);
+    const float width = static_cast<float>(std::max(1L, client.right - client.left));
+    const float height = static_cast<float>(std::max(1L, client.bottom - client.top));
+    const float scale = std::max(
+        0.01F, std::min(width / windowWidth, height / windowHeight));
+    return {
+        .scale = scale,
+        .offsetX = (width - windowWidth * scale) * 0.5F,
+        .offsetY = (height - windowHeight * scale) * 0.5F,
+    };
+}
+
+[[nodiscard]] D2D1_POINT_2F designPoint(
+    const HWND window, const float x, const float y) {
+    const auto viewport = designViewport(window);
+    return {
+        (x - viewport.offsetX) / viewport.scale,
+        (y - viewport.offsetY) / viewport.scale,
+    };
+}
+
+[[nodiscard]] RECT physicalRect(const HWND window, const Rect rectangle) {
+    const auto viewport = designViewport(window);
+    return {
+        static_cast<LONG>(std::lround(viewport.offsetX + rectangle.left * viewport.scale)),
+        static_cast<LONG>(std::lround(viewport.offsetY + rectangle.top * viewport.scale)),
+        static_cast<LONG>(std::lround(viewport.offsetX + rectangle.right * viewport.scale)),
+        static_cast<LONG>(std::lround(viewport.offsetY + rectangle.bottom * viewport.scale)),
+    };
+}
+
 struct AudioRow final {
     DWORD processId{};
     std::wstring name;
@@ -2331,6 +2370,10 @@ void paint(const HWND window, AppState& state) {
         ensureGraphics(window, state);
         state.renderTarget->BeginDraw();
         state.renderTarget->Clear(background);
+        const auto viewport = designViewport(window);
+        state.renderTarget->SetTransform(D2D1::Matrix3x2F(
+            viewport.scale, 0, 0, viewport.scale,
+            viewport.offsetX, viewport.offsetY));
         drawAmbientGlow(state);
         drawSidebar(state);
         drawTitlebar(state);
@@ -2340,6 +2383,7 @@ void paint(const HWND window, AppState& state) {
         else drawSettingsPage(state);
         drawClipContextMenu(state);
         drawAudioGroupDialog(state);
+        state.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
         if (state.renderTarget->EndDraw() == D2DERR_RECREATE_TARGET) {
             state.renderTarget.Reset();
             state.brush.Reset();
@@ -2356,6 +2400,14 @@ void updateEditorVisibility(AppState& state) {
         state.activeField = HitTarget::none;
     }
     if (state.videoWindow != nullptr) {
+        if (state.mainWindow != nullptr) {
+            const RECT video = physicalRect(
+                state.mainWindow, {284, 159, 1036, 566});
+            MoveWindow(state.videoWindow, video.left, video.top,
+                       std::max(1L, video.right - video.left),
+                       std::max(1L, video.bottom - video.top), TRUE);
+            if (state.mediaPlayer != nullptr) state.mediaPlayer->UpdateVideo();
+        }
         ShowWindow(state.videoWindow,
                    state.page == Page::editor && !state.editorAudioView ? SW_SHOW : SW_HIDE);
     }
@@ -2494,7 +2546,10 @@ void exitFullscreen(AppState& state) {
     state.fullscreenVideoWindow = nullptr;
     state.fullscreen = false;
     if (fullscreenWindow != nullptr) DestroyWindow(fullscreenWindow);
-    MoveWindow(state.videoWindow, 284, 159, 752, 407, TRUE);
+    const RECT video = physicalRect(state.mainWindow, {284, 159, 1036, 566});
+    MoveWindow(state.videoWindow, video.left, video.top,
+               std::max(1L, video.right - video.left),
+               std::max(1L, video.bottom - video.top), TRUE);
     ShowWindow(state.videoWindow, SW_SHOW);
     seekEditor(state, position);
     if (resumePlayback && state.mediaPlayer != nullptr) state.mediaPlayer->Play();
@@ -3907,9 +3962,11 @@ LRESULT CALLBACK windowProcedure(
         if (standard != HTCLIENT) return standard;
         POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ScreenToClient(window, &point);
-        if (point.y < 64 &&
-            !minimizeRect.contains(static_cast<float>(point.x), static_cast<float>(point.y)) &&
-            !closeRect.contains(static_cast<float>(point.x), static_cast<float>(point.y))) {
+        const auto logical = designPoint(
+            window, static_cast<float>(point.x), static_cast<float>(point.y));
+        if (logical.y < 64 &&
+            !minimizeRect.contains(logical.x, logical.y) &&
+            !closeRect.contains(logical.x, logical.y)) {
             return HTCAPTION;
         }
         return HTCLIENT;
@@ -3919,8 +3976,10 @@ LRESULT CALLBACK windowProcedure(
             POINT cursor{};
             GetCursorPos(&cursor);
             ScreenToClient(window, &cursor);
-            const float x = static_cast<float>(cursor.x);
-            const float y = static_cast<float>(cursor.y);
+            const auto logical = designPoint(
+                window, static_cast<float>(cursor.x), static_cast<float>(cursor.y));
+            const float x = logical.x;
+            const float y = logical.y;
             const bool audioTimeline = state->page == Page::editor &&
                 state->editorAudioView && x >= 510 && x <= 1024 &&
                 y >= 216 && y < 536;
@@ -3955,8 +4014,11 @@ LRESULT CALLBACK windowProcedure(
         if (state != nullptr) {
             TRACKMOUSEEVENT tracking{sizeof(tracking), TME_LEAVE, window, 0};
             TrackMouseEvent(&tracking);
-            state->mouseX = static_cast<float>(GET_X_LPARAM(lParam));
-            state->mouseY = static_cast<float>(GET_Y_LPARAM(lParam));
+            const auto logical = designPoint(
+                window, static_cast<float>(GET_X_LPARAM(lParam)),
+                static_cast<float>(GET_Y_LPARAM(lParam)));
+            state->mouseX = logical.x;
+            state->mouseY = logical.y;
             if (state->colorDrag != ColorDrag::none) {
                 updateAccentFromPointer(*state, state->mouseX, state->mouseY);
             }
@@ -3978,8 +4040,11 @@ LRESULT CALLBACK windowProcedure(
         return 0;
     case WM_RBUTTONUP:
         if (state != nullptr && state->page == Page::clips) {
-            const float x = static_cast<float>(GET_X_LPARAM(lParam));
-            const float y = static_cast<float>(GET_Y_LPARAM(lParam));
+            const auto logical = designPoint(
+                window, static_cast<float>(GET_X_LPARAM(lParam)),
+                static_cast<float>(GET_Y_LPARAM(lParam)));
+            const float x = logical.x;
+            const float y = logical.y;
             if (const int index = clipIndexAt(*state, x, y); index >= 0) {
                 openClipContextMenu(
                     *state, state->clips[static_cast<std::size_t>(index)].path, x, y);
@@ -3991,10 +4056,13 @@ LRESULT CALLBACK windowProcedure(
             InvalidateRect(window, nullptr, FALSE);
         }
         break;
-    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDOWN: {
+        const auto logical = designPoint(
+            window, static_cast<float>(GET_X_LPARAM(lParam)),
+            static_cast<float>(GET_Y_LPARAM(lParam)));
         if (state != nullptr && state->page == Page::settings) {
-            const float x = static_cast<float>(GET_X_LPARAM(lParam));
-            const float y = static_cast<float>(GET_Y_LPARAM(lParam));
+            const float x = logical.x;
+            const float y = logical.y;
             if (accentPlaneRect.contains(x, y) || accentHueRect.contains(x, y)) {
                 state->colorDrag = accentPlaneRect.contains(x, y)
                     ? ColorDrag::plane : ColorDrag::hue;
@@ -4007,9 +4075,9 @@ LRESULT CALLBACK windowProcedure(
         }
         if (state != nullptr && state->page == Page::editor &&
             state->editorAudioView && state->editorDuration > 0.0 &&
-            GET_X_LPARAM(lParam) >= 510 && GET_X_LPARAM(lParam) <= 1024 &&
-            GET_Y_LPARAM(lParam) >= 216 && GET_Y_LPARAM(lParam) < 536) {
-            const int visible = (GET_Y_LPARAM(lParam) - 216) / 64;
+            logical.x >= 510 && logical.x <= 1024 &&
+            logical.y >= 216 && logical.y < 536) {
+            const int visible = static_cast<int>((logical.y - 216) / 64);
             const int index = visible + state->editorAudioScroll;
             if (index >= 0 && index < static_cast<int>(state->editorAudioTracks.size()) &&
                 state->editorAudioTracks[static_cast<std::size_t>(index)].included) {
@@ -4021,7 +4089,7 @@ LRESULT CALLBACK windowProcedure(
                 const float endX = timeline.left +
                     static_cast<float>(track.end / state->editorDuration) *
                         (timeline.right - timeline.left);
-                const float clickX = static_cast<float>(GET_X_LPARAM(lParam));
+                const float clickX = logical.x;
                 state->activeEditorAudioTrack = index;
                 state->dragHandle = std::abs(clickX - startX) <= std::abs(clickX - endX)
                     ? DragHandle::audioStart : DragHandle::audioEnd;
@@ -4037,15 +4105,15 @@ LRESULT CALLBACK windowProcedure(
         }
         if (state != nullptr && state->page == Page::editor &&
             state->editorDuration > 0.0 &&
-            GET_X_LPARAM(lParam) >= static_cast<int>(editorTimelineRect.left - 10) &&
-            GET_X_LPARAM(lParam) <= static_cast<int>(editorTimelineRect.right + 10) &&
-            GET_Y_LPARAM(lParam) >= 667 && GET_Y_LPARAM(lParam) <= 707) {
+            logical.x >= editorTimelineRect.left - 10 &&
+            logical.x <= editorTimelineRect.right + 10 &&
+            logical.y >= 667 && logical.y <= 707) {
             const float timelineWidth = editorTimelineRect.right - editorTimelineRect.left;
             const float startX = editorTimelineRect.left +
                 static_cast<float>(state->trimStart / state->editorDuration) * timelineWidth;
             const float endX = editorTimelineRect.left +
                 static_cast<float>(state->trimEnd / state->editorDuration) * timelineWidth;
-            const float clickX = static_cast<float>(GET_X_LPARAM(lParam));
+            const float clickX = logical.x;
             constexpr float handleGrabRadius = 13.0F;
             if (std::abs(clickX - startX) <= handleGrabRadius) {
                 state->dragHandle = DragHandle::start;
@@ -4057,11 +4125,12 @@ LRESULT CALLBACK windowProcedure(
             if (state->mediaPlayer != nullptr) state->mediaPlayer->Pause();
             state->playing = false;
             SetCapture(window);
-            moveTrimHandle(*state, static_cast<float>(GET_X_LPARAM(lParam)));
+            moveTrimHandle(*state, logical.x);
             InvalidateRect(window, nullptr, FALSE);
             return 0;
         }
         break;
+    }
     case WM_MOUSELEAVE:
         if (state != nullptr) {
             state->hover = HitTarget::none;
@@ -4070,12 +4139,14 @@ LRESULT CALLBACK windowProcedure(
             InvalidateRect(window, nullptr, FALSE);
         }
         return 0;
-    case WM_LBUTTONUP:
+    case WM_LBUTTONUP: {
         if (state != nullptr) {
+            const auto logical = designPoint(
+                window, static_cast<float>(GET_X_LPARAM(lParam)),
+                static_cast<float>(GET_Y_LPARAM(lParam)));
             if (state->colorDrag != ColorDrag::none) {
                 updateAccentFromPointer(
-                    *state, static_cast<float>(GET_X_LPARAM(lParam)),
-                    static_cast<float>(GET_Y_LPARAM(lParam)));
+                    *state, logical.x, logical.y);
                 state->colorDrag = ColorDrag::none;
                 ReleaseCapture();
                 saveAccentColor(*state);
@@ -4085,8 +4156,8 @@ LRESULT CALLBACK windowProcedure(
                 return 0;
             }
             if (state->clipContextMenuOpen) {
-                const float x = static_cast<float>(GET_X_LPARAM(lParam));
-                const float y = static_cast<float>(GET_Y_LPARAM(lParam));
+                const float x = logical.x;
+                const float y = logical.y;
                 int selected = -1;
                 for (int item = 0; item < 5; ++item) {
                     if (clipMenuItemRect(*state, item).contains(x, y)) {
@@ -4105,9 +4176,9 @@ LRESULT CALLBACK windowProcedure(
             if (state->dragHandle != DragHandle::none) {
                 if (state->dragHandle == DragHandle::audioStart ||
                     state->dragHandle == DragHandle::audioEnd) {
-                    moveEditorAudioHandle(*state, static_cast<float>(GET_X_LPARAM(lParam)));
+                    moveEditorAudioHandle(*state, logical.x);
                 } else {
-                    moveTrimHandle(*state, static_cast<float>(GET_X_LPARAM(lParam)));
+                    moveTrimHandle(*state, logical.x);
                 }
                 state->dragHandle = DragHandle::none;
                 state->activeEditorAudioTrack = -1;
@@ -4115,10 +4186,10 @@ LRESULT CALLBACK windowProcedure(
                 InvalidateRect(window, nullptr, FALSE);
                 return 0;
             }
-            handleClick(window, *state, static_cast<float>(GET_X_LPARAM(lParam)),
-                        static_cast<float>(GET_Y_LPARAM(lParam)));
+            handleClick(window, *state, logical.x, logical.y);
         }
         return 0;
+    }
     case WM_CHAR:
         if (state != nullptr &&
             (!state->engine.isRunning() || state->activeField == HitTarget::editorName)) {
@@ -4348,6 +4419,16 @@ LRESULT CALLBACK windowProcedure(
         if (state != nullptr && state->renderTarget != nullptr && LOWORD(lParam) > 0 && HIWORD(lParam) > 0) {
             state->renderTarget->Resize(D2D1::SizeU(LOWORD(lParam), HIWORD(lParam)));
         }
+        if (state != nullptr && LOWORD(lParam) > 0 && HIWORD(lParam) > 0) {
+            updateEditorVisibility(*state);
+            InvalidateRect(window, nullptr, FALSE);
+        }
+        return 0;
+    case WM_GETMINMAXINFO:
+        if (auto* limits = reinterpret_cast<MINMAXINFO*>(lParam); limits != nullptr) {
+            limits->ptMinTrackSize.x = 896;
+            limits->ptMinTrackSize.y = 640;
+        }
         return 0;
     case WM_DESTROY:
         if (state != nullptr) {
@@ -4420,12 +4501,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
     RegisterClassExW(&trayMenuClass);
 
     AppState state;
-    const int x = std::max(0, (GetSystemMetrics(SM_CXSCREEN) - static_cast<int>(windowWidth)) / 2);
-    const int y = std::max(0, (GetSystemMetrics(SM_CYSCREEN) - static_cast<int>(windowHeight)) / 2);
+    constexpr DWORD mainWindowStyle =
+        WS_POPUP | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
+    constexpr DWORD mainWindowExStyle = WS_EX_APPWINDOW;
+    RECT initialArea{0, 0, static_cast<LONG>(windowWidth), static_cast<LONG>(windowHeight)};
+    AdjustWindowRectEx(&initialArea, mainWindowStyle, FALSE, mainWindowExStyle);
+    const int initialWidth = initialArea.right - initialArea.left;
+    const int initialHeight = initialArea.bottom - initialArea.top;
+    const int x = std::max(0, (GetSystemMetrics(SM_CXSCREEN) - initialWidth) / 2);
+    const int y = std::max(0, (GetSystemMetrics(SM_CYSCREEN) - initialHeight) / 2);
     const HWND window = CreateWindowExW(
-        WS_EX_APPWINDOW, windowClassName, L"NexPlay",
-        WS_POPUP | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
-        x, y, static_cast<int>(windowWidth), static_cast<int>(windowHeight),
+        mainWindowExStyle, windowClassName, L"NexPlay", mainWindowStyle,
+        x, y, initialWidth, initialHeight,
         nullptr, nullptr, instance, &state);
     if (window == nullptr) {
         CoUninitialize();
