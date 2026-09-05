@@ -139,7 +139,7 @@ constexpr Rect fpsFieldRect{694, 405, 824, 455};
 constexpr Rect bitrateFieldRect{838, 405, 1036, 455};
 constexpr Rect editorBackRect{260, 91, 344, 129};
 constexpr Rect editorPlayRect{284, 721, 334, 761};
-constexpr Rect editorFullscreenRect{346, 721, 486, 761};
+constexpr Rect editorFullscreenRect{346, 721, 396, 761};
 constexpr Rect editorSaveRect{846, 721, 1036, 761};
 constexpr Rect editorNameRect{284, 604, 654, 648};
 constexpr Rect editorTimelineRect{284, 682, 1036, 700};
@@ -320,26 +320,12 @@ LRESULT CALLBACK videoWindowProcedure(
         PostMessageW(owner, clearEditorFocusMessage, 0, 0);
     }
     if (message == WM_LBUTTONUP && owner != nullptr) {
-        if (RemovePropW(window, L"NexPlaySuppressSingleClick") != nullptr) {
-            return 0;
-        }
         PostMessageW(owner, togglePlaybackMessage, 0, 0);
         return 0;
     }
     if (message == WM_KEYDOWN && wParam == VK_ESCAPE) {
         if (owner != nullptr) PostMessageW(owner, exitFullscreenMessage, 0, 0);
         return 0;
-    }
-    if (message == WM_LBUTTONDBLCLK) {
-        SetPropW(window, L"NexPlaySuppressSingleClick", reinterpret_cast<HANDLE>(1));
-        if (owner != nullptr) {
-            PostMessageW(owner, togglePlaybackMessage, 0, 0);
-            PostMessageW(owner, exitFullscreenMessage, 1, 0);
-        }
-        return 0;
-    }
-    if (message == WM_NCDESTROY) {
-        RemovePropW(window, L"NexPlaySuppressSingleClick");
     }
     if (message == WM_ERASEBKGND) {
         const RECT area = [] (const HWND target) {
@@ -1236,6 +1222,30 @@ void drawButton(AppState& state, const Rect rectangle, const std::wstring& label
     drawCenteredText(state, label, rectangle, state.buttonFormat.Get(), textColor);
 }
 
+void drawFullscreenIconButton(AppState& state) {
+    drawButton(state, editorFullscreenRect, L"",
+               HitTarget::editorFullscreen, false);
+    const float left = editorFullscreenRect.left + 14;
+    const float top = editorFullscreenRect.top + 11;
+    const float right = editorFullscreenRect.right - 14;
+    const float bottom = editorFullscreenRect.bottom - 11;
+    constexpr float arm = 6.0F;
+    state.brush->SetColor(white);
+    const auto corner = [&](const float x, const float y,
+                            const float horizontal, const float vertical) {
+        state.renderTarget->DrawLine(
+            D2D1::Point2F(x, y), D2D1::Point2F(x + horizontal * arm, y),
+            state.brush.Get(), 1.8F);
+        state.renderTarget->DrawLine(
+            D2D1::Point2F(x, y), D2D1::Point2F(x, y + vertical * arm),
+            state.brush.Get(), 1.8F);
+    };
+    corner(left, top, 1, 1);
+    corner(right, top, -1, 1);
+    corner(left, bottom, 1, -1);
+    corner(right, bottom, -1, -1);
+}
+
 void drawSidebar(AppState& state) {
     state.brush->SetColor(sidebar);
     state.renderTarget->FillRectangle(D2D1::RectF(0, 0, 220, windowHeight), state.brush.Get());
@@ -1819,10 +1829,9 @@ void drawEditorPage(AppState& state) {
 
     drawButton(state, editorPlayRect, state.playing ? L"Ⅱ" : L"▶",
                HitTarget::editorPlay, false);
-    drawButton(state, editorFullscreenRect, L"Pełny ekran",
-               HitTarget::editorFullscreen, false);
+    drawFullscreenIconButton(state);
     drawText(state, L"Spacja  play/pause  •  ← →  ±5 s",
-             {504, 731, 830, 753}, state.smallFormat.Get(), muted);
+             {414, 731, 830, 753}, state.smallFormat.Get(), muted);
     drawButton(state, editorSaveRect, L"Eksportuj nowy klip",
                HitTarget::editorSave, true, state.editorDuration > 0.0);
 }
@@ -3794,8 +3803,7 @@ LRESULT CALLBACK windowProcedure(
         return 0;
     case exitFullscreenMessage:
         if (state != nullptr) {
-            if (wParam != 0 && !state->fullscreen) enterFullscreen(*state);
-            else exitFullscreen(*state);
+            exitFullscreen(*state);
             InvalidateRect(window, nullptr, FALSE);
         }
         return 0;
@@ -3945,7 +3953,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
     RegisterClassExW(&windowClass);
 
     WNDCLASSEXW videoClass{sizeof(videoClass)};
-    videoClass.style = CS_DBLCLKS;
     videoClass.lpfnWndProc = videoWindowProcedure;
     videoClass.hInstance = instance;
     videoClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
