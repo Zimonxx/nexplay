@@ -69,8 +69,9 @@ stereo; mikrofon zachowuje swoją liczbę kanałów i częstotliwość próbkowa
 - zawiera panel nagrywania oraz bibliotekę zapisanych klipów,
 - biblioteka pokazuje nagrania w dwukolumnowym gridzie z prawdziwymi miniaturami,
 - przesuwanie kursora po miniaturze pokazuje dokładną klatkę wynikającą z FPS
-  nagrania i pozycji na timeline, podobnie jak w Medal; potrzebne klatki są dekodowane na żądanie
-  bezpośrednio z MP4, zapamiętywane w RAM-ie i usuwane przy zamknięciu aplikacji,
+  nagrania i pozycji na timeline, podobnie jak w Medal; małe okno sąsiednich
+  klatek jest dekodowane na żądanie bezpośrednio z MP4, zapamiętywane w RAM-ie
+  i usuwane przy zamknięciu aplikacji,
 - własne menu PPM w stylu AMOLED pozwala otworzyć edytor, odtworzyć plik
   systemowo, pokazać go w folderze, skopiować ścieżkę albo przenieść nagranie
   do Kosza,

@@ -163,9 +163,10 @@ struct ClipRow final {
 struct ThumbnailResult final {
     std::filesystem::path clip;
     int frameIndex{};
+    int firstFrameIndex{};
     double duration{};
     double framesPerSecond{};
-    std::vector<std::uint8_t> frame;
+    std::vector<std::vector<std::uint8_t>> frames;
 };
 
 std::counting_semaphore<2> thumbnailSlots{2};
@@ -703,12 +704,34 @@ void removeLegacyThumbnailCache() noexcept {
     return denominator == 0.0 ? 0.0 : numerator / denominator;
 }
 
+[[nodiscard]] std::vector<std::vector<std::uint8_t>> splitMjpegFrames(
+    const std::string& stream) {
+    std::vector<std::vector<std::uint8_t>> frames;
+    std::size_t start = std::string::npos;
+    for (std::size_t index = 0; index + 1 < stream.size(); ++index) {
+        const auto first = static_cast<unsigned char>(stream[index]);
+        const auto second = static_cast<unsigned char>(stream[index + 1]);
+        if (start == std::string::npos && first == 0xFF && second == 0xD8) {
+            start = index;
+            ++index;
+        } else if (start != std::string::npos && first == 0xFF && second == 0xD9) {
+            const std::size_t end = index + 2;
+            frames.emplace_back(stream.begin() + static_cast<std::ptrdiff_t>(start),
+                                stream.begin() + static_cast<std::ptrdiff_t>(end));
+            start = std::string::npos;
+            ++index;
+        }
+    }
+    return frames;
+}
+
 [[nodiscard]] ThumbnailResult generateThumbnail(
     const std::filesystem::path& clip, const int frameIndex,
     double duration, double framesPerSecond) {
     ThumbnailResult result{
         .clip = clip,
         .frameIndex = frameIndex,
+        .firstFrameIndex = frameIndex,
         .duration = duration,
         .framesPerSecond = framesPerSecond,
     };
@@ -739,17 +762,24 @@ void removeLegacyThumbnailCache() noexcept {
         const std::wstring scaleFilter = quoteProcessArgument(
             L"scale=352:198:force_original_aspect_ratio=decrease:force_divisible_by=2,"
             L"pad=352:198:(ow-iw)/2:(oh-ih)/2");
+        constexpr int previewWindowSize = 9;
+        constexpr int framesBeforeCursor = previewWindowSize / 2;
+        const int totalFrames = std::max(
+            1, static_cast<int>(std::ceil(duration * framesPerSecond)));
+        result.firstFrameIndex = std::clamp(
+            frameIndex - framesBeforeCursor, 0, totalFrames - 1);
+        const int frameCount = std::min(
+            previewWindowSize, totalFrames - result.firstFrameIndex);
         const double timestamp = std::clamp(
-            (static_cast<double>(frameIndex) + 0.5) / framesPerSecond,
+            (static_cast<double>(result.firstFrameIndex) + 0.5) / framesPerSecond,
             0.0, std::max(0.0, duration - 0.5 / framesPerSecond));
         const std::vector<std::wstring> arguments{
             L"ffmpeg.exe", L"-hide_banner", L"-loglevel", L"quiet",
             L"-ss", secondsArgument(timestamp), L"-i", quoteProcessArgument(clip.wstring()),
-            L"-frames:v", L"1", L"-an", L"-vf", scaleFilter,
+            L"-frames:v", std::to_wstring(frameCount), L"-an", L"-vf", scaleFilter,
             L"-q:v", L"3", L"-f", L"image2pipe", L"-vcodec", L"mjpeg", L"pipe:1",
         };
-        const std::string image = runHiddenProcessCapture(arguments);
-        result.frame.assign(image.begin(), image.end());
+        result.frames = splitMjpegFrames(runHiddenProcessCapture(arguments));
     } catch (...) {
     }
     return result;
@@ -3132,7 +3162,7 @@ LRESULT CALLBACK windowProcedure(
             state->thumbnailClipActive.erase(result->clip);
             const bool ready = std::filesystem::exists(result->clip) &&
                 result->duration > 0.0 && result->framesPerSecond > 0.0 &&
-                !result->frame.empty();
+                !result->frames.empty();
             auto& preview = state->thumbnailMemory[result->clip];
             if (preview == nullptr) preview = std::make_shared<ClipPreview>();
             if (result->duration > 0.0) preview->duration = result->duration;
@@ -3140,8 +3170,14 @@ LRESULT CALLBACK windowProcedure(
                 preview->framesPerSecond = result->framesPerSecond;
             }
             if (ready) {
-                preview->frames[result->frameIndex] = std::move(result->frame);
-                state->thumbnailFailures.erase({result->clip, result->frameIndex});
+                for (std::size_t index = 0; index < result->frames.size(); ++index) {
+                    const int decodedFrame = result->firstFrameIndex +
+                        static_cast<int>(index);
+                    if (!result->frames[index].empty()) {
+                        preview->frames[decodedFrame] = std::move(result->frames[index]);
+                        state->thumbnailFailures.erase({result->clip, decodedFrame});
+                    }
+                }
             } else {
                 state->thumbnailFailures.insert({result->clip, result->frameIndex});
             }
