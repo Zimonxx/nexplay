@@ -35,6 +35,7 @@ using Microsoft::WRL::ComPtr;
 constexpr wchar_t windowClassName[] = L"NexPlayMainWindow";
 constexpr wchar_t videoWindowClassName[] = L"NexPlayVideoSurface";
 constexpr wchar_t fullscreenWindowClassName[] = L"NexPlayFullscreenWindow";
+constexpr wchar_t trayMenuWindowClassName[] = L"NexPlayTrayMenuWindow";
 constexpr UINT trayMessage = WM_APP + 1;
 constexpr UINT statusMessage = WM_APP + 2;
 constexpr UINT editorDoneMessage = WM_APP + 3;
@@ -46,11 +47,10 @@ constexpr UINT togglePlaybackMessage = WM_APP + 8;
 constexpr UINT_PTR videoClickTimerId = 1;
 constexpr int saveHotkeyId = 1;
 constexpr int stopHotkeyId = 2;
-constexpr int idTrayShow = 201;
-constexpr int idTraySave = 202;
-constexpr int idTrayExit = 203;
 constexpr float windowWidth = 1120.0F;
 constexpr float windowHeight = 800.0F;
+constexpr float trayMenuWidth = 310.0F;
+constexpr float trayMenuHeight = 238.0F;
 
 constexpr D2D1_COLOR_F background = {0.0F, 0.0F, 0.0F, 1.0F};
 constexpr D2D1_COLOR_F sidebar = {0.012F, 0.012F, 0.018F, 1.0F};
@@ -241,6 +241,7 @@ struct AppState final {
     std::array<float, static_cast<std::size_t>(HitTarget::count)> hoverAnimation{};
     std::wstring status{L"Gotowy do uruchomienia"};
     NOTIFYICONDATAW tray{};
+    HWND trayMenuWindow{};
     HWND videoWindow{};
     HWND fullscreenWindow{};
     HWND fullscreenVideoWindow{};
@@ -257,12 +258,19 @@ struct AppState final {
     std::map<std::wstring, ComPtr<ID2D1Bitmap>> thumbnailBitmaps;
     ComPtr<ID2D1HwndRenderTarget> fullscreenRenderTarget;
     ComPtr<ID2D1SolidColorBrush> fullscreenBrush;
+    ComPtr<ID2D1HwndRenderTarget> trayMenuRenderTarget;
+    ComPtr<ID2D1SolidColorBrush> trayMenuBrush;
     ComPtr<IDWriteTextFormat> titleFormat;
     ComPtr<IDWriteTextFormat> headingFormat;
     ComPtr<IDWriteTextFormat> bodyFormat;
     ComPtr<IDWriteTextFormat> smallFormat;
     ComPtr<IDWriteTextFormat> buttonFormat;
     ComPtr<IDWriteTextFormat> brandFormat;
+    ComPtr<IDWriteTextFormat> trayMenuTitleFormat;
+    ComPtr<IDWriteTextFormat> trayMenuBodyFormat;
+    ComPtr<IDWriteTextFormat> trayMenuSmallFormat;
+    int trayMenuHover{-1};
+    std::array<float, 3> trayMenuHoverAnimation{};
 };
 
 HHOOK keyboardHook{};
@@ -278,6 +286,7 @@ void seekEditor(AppState& state, double seconds);
 [[nodiscard]] std::wstring timeLabel(double seconds);
 [[nodiscard]] std::wstring preciseTimeLabel(double seconds);
 LRESULT CALLBACK fullscreenWindowProcedure(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK trayMenuWindowProcedure(HWND, UINT, WPARAM, LPARAM);
 
 LRESULT CALLBACK videoWindowProcedure(
     const HWND window, const UINT message, const WPARAM wParam, const LPARAM lParam) {
@@ -2531,21 +2540,414 @@ void exportEditor(const HWND window, AppState& state) {
     return HitTarget::none;
 }
 
-void showTrayMenu(const HWND window, const AppState& state) {
+constexpr Rect trayShowRect{12, 68, 298, 112};
+constexpr Rect traySaveRect{12, 116, 298, 160};
+constexpr Rect trayExitRect{12, 182, 298, 226};
+
+[[nodiscard]] D2D1_COLOR_F blendColor(
+    const D2D1_COLOR_F from, const D2D1_COLOR_F to, const float amount) noexcept {
+    const float factor = std::clamp(amount, 0.0F, 1.0F);
+    return {
+        std::lerp(from.r, to.r, factor),
+        std::lerp(from.g, to.g, factor),
+        std::lerp(from.b, to.b, factor),
+        std::lerp(from.a, to.a, factor),
+    };
+}
+
+void ensureTrayMenuGraphics(const HWND window, AppState& state) {
+    if (state.trayMenuRenderTarget != nullptr) return;
+    if (state.d2dFactory == nullptr && FAILED(D2D1CreateFactory(
+            D2D1_FACTORY_TYPE_SINGLE_THREADED, IID_PPV_ARGS(&state.d2dFactory)))) {
+        throw std::runtime_error("Nie mozna uruchomic menu zasobnika.");
+    }
+    if (state.writeFactory == nullptr && FAILED(DWriteCreateFactory(
+            DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+            reinterpret_cast<IUnknown**>(state.writeFactory.GetAddressOf())))) {
+        throw std::runtime_error("Nie mozna uruchomic tekstu menu zasobnika.");
+    }
+    RECT client{};
+    GetClientRect(window, &client);
+    if (FAILED(state.d2dFactory->CreateHwndRenderTarget(
+            D2D1::RenderTargetProperties(
+                D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN),
+                96.0F, 96.0F),
+            D2D1::HwndRenderTargetProperties(
+                window, D2D1::SizeU(client.right, client.bottom)),
+            &state.trayMenuRenderTarget)) ||
+        FAILED(state.trayMenuRenderTarget->CreateSolidColorBrush(
+            white, &state.trayMenuBrush))) {
+        state.trayMenuRenderTarget.Reset();
+        throw std::runtime_error("Nie mozna utworzyc powierzchni menu zasobnika.");
+    }
+    if (state.trayMenuTitleFormat == nullptr) {
+        createTextFormat(state.writeFactory.Get(), L"Segoe UI Variable Display", 16,
+                         DWRITE_FONT_WEIGHT_BOLD, state.trayMenuTitleFormat);
+        createTextFormat(state.writeFactory.Get(), L"Segoe UI Variable Text", 13,
+                         DWRITE_FONT_WEIGHT_SEMI_BOLD, state.trayMenuBodyFormat);
+        createTextFormat(state.writeFactory.Get(), L"Segoe UI Variable Text", 10,
+                         DWRITE_FONT_WEIGHT_SEMI_BOLD, state.trayMenuSmallFormat);
+    }
+}
+
+void trayFillRounded(AppState& state, const Rect rectangle, const float radius,
+                     const D2D1_COLOR_F color) {
+    state.trayMenuBrush->SetColor(color);
+    state.trayMenuRenderTarget->FillRoundedRectangle(
+        D2D1::RoundedRect(rectangle.d2d(), radius, radius), state.trayMenuBrush.Get());
+}
+
+void trayStrokeRounded(AppState& state, const Rect rectangle, const float radius,
+                       const D2D1_COLOR_F color, const float width = 1.0F) {
+    state.trayMenuBrush->SetColor(color);
+    state.trayMenuRenderTarget->DrawRoundedRectangle(
+        D2D1::RoundedRect(rectangle.d2d(), radius, radius),
+        state.trayMenuBrush.Get(), width);
+}
+
+void trayDrawText(AppState& state, const std::wstring& text, const Rect rectangle,
+                  IDWriteTextFormat* format, const D2D1_COLOR_F color) {
+    state.trayMenuBrush->SetColor(color);
+    state.trayMenuRenderTarget->DrawTextW(
+        text.c_str(), static_cast<UINT32>(text.size()), format, rectangle.d2d(),
+        state.trayMenuBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+}
+
+void trayDrawCenteredText(AppState& state, const std::wstring& text, const Rect rectangle,
+                          IDWriteTextFormat* format, const D2D1_COLOR_F color) {
+    format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    trayDrawText(state, text, rectangle, format, color);
+    format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+}
+
+void trayDrawGlow(AppState& state, const Rect rectangle, const float radius,
+                  const D2D1_COLOR_F source, const float intensity) {
+    for (int layer = 5; layer >= 1; --layer) {
+        D2D1_COLOR_F glow = source;
+        glow.a = intensity * (0.018F + static_cast<float>(6 - layer) * 0.012F);
+        trayStrokeRounded(
+            state, expanded(rectangle, static_cast<float>(layer) * 1.7F),
+            radius + static_cast<float>(layer) * 1.7F, glow,
+            static_cast<float>(layer) * 1.4F);
+    }
+}
+
+void trayFillAccentGradient(AppState& state, const Rect rectangle, const float radius) {
+    const D2D1_GRADIENT_STOP stops[] = {{0.0F, primary}, {1.0F, accentSecondary}};
+    ComPtr<ID2D1GradientStopCollection> collection;
+    ComPtr<ID2D1LinearGradientBrush> gradient;
+    if (SUCCEEDED(state.trayMenuRenderTarget->CreateGradientStopCollection(
+            stops, static_cast<UINT32>(std::size(stops)), &collection)) &&
+        SUCCEEDED(state.trayMenuRenderTarget->CreateLinearGradientBrush(
+            D2D1::LinearGradientBrushProperties(
+                D2D1::Point2F(rectangle.left, rectangle.top),
+                D2D1::Point2F(rectangle.right, rectangle.bottom)),
+            collection.Get(), &gradient))) {
+        state.trayMenuRenderTarget->FillRoundedRectangle(
+            D2D1::RoundedRect(rectangle.d2d(), radius, radius), gradient.Get());
+    } else {
+        trayFillRounded(state, rectangle, radius, primary);
+    }
+}
+
+void drawTrayMenuIcon(AppState& state, const int item, const float top,
+                      const D2D1_COLOR_F color) {
+    auto* target = state.trayMenuRenderTarget.Get();
+    auto* brush = state.trayMenuBrush.Get();
+    brush->SetColor(color);
+    if (item == 0) {
+        target->DrawRoundedRectangle(
+            D2D1::RoundedRect(D2D1::RectF(25, top + 13, 39, top + 25), 2, 2),
+            brush, 1.5F);
+        target->DrawLine(D2D1::Point2F(28, top + 28),
+                         D2D1::Point2F(36, top + 28), brush, 1.5F);
+    } else if (item == 1) {
+        target->DrawLine(D2D1::Point2F(32, top + 12),
+                         D2D1::Point2F(32, top + 26), brush, 1.7F);
+        target->DrawLine(D2D1::Point2F(27, top + 21),
+                         D2D1::Point2F(32, top + 26), brush, 1.7F);
+        target->DrawLine(D2D1::Point2F(37, top + 21),
+                         D2D1::Point2F(32, top + 26), brush, 1.7F);
+        target->DrawLine(D2D1::Point2F(25, top + 30),
+                         D2D1::Point2F(39, top + 30), brush, 1.7F);
+    } else {
+        target->DrawEllipse(
+            D2D1::Ellipse(D2D1::Point2F(32, top + 22), 8, 8), brush, 1.6F);
+        target->DrawLine(D2D1::Point2F(32, top + 10),
+                         D2D1::Point2F(32, top + 21), brush, 1.8F);
+    }
+}
+
+void drawTrayMenuRow(AppState& state, const int item, const Rect rectangle,
+                     const std::wstring& label, const bool enabled,
+                     const bool destructive = false) {
+    const float hover = state.trayMenuHoverAnimation[static_cast<std::size_t>(item)];
+    const D2D1_COLOR_F accent = destructive ? red : primary;
+    if (hover > 0.01F && enabled) {
+        D2D1_COLOR_F hoverFill = blendColor(field, accent, 0.11F);
+        hoverFill.a = 0.40F + hover * 0.50F;
+        trayDrawGlow(state, rectangle, 10, accent, hover * 0.45F);
+        trayFillRounded(state, rectangle, 10, hoverFill);
+        D2D1_COLOR_F hoverBorder = accent;
+        hoverBorder.a = hover * 0.34F;
+        trayStrokeRounded(state, rectangle, 10, hoverBorder);
+    }
+    const D2D1_COLOR_F content = !enabled
+        ? blendColor(muted, background, 0.40F)
+        : (destructive && hover > 0.08F ? red : white);
+    drawTrayMenuIcon(state, item, rectangle.top, content);
+    trayDrawText(state, label, {52, rectangle.top + 13, 194, rectangle.bottom - 8},
+                 state.trayMenuBodyFormat.Get(), content);
+}
+
+void paintTrayMenu(const HWND window, AppState& state) {
+    PAINTSTRUCT paint{};
+    BeginPaint(window, &paint);
+    try {
+        ensureTrayMenuGraphics(window, state);
+        auto* target = state.trayMenuRenderTarget.Get();
+        target->BeginDraw();
+        target->Clear(background);
+
+        const float phase = static_cast<float>(GetTickCount64() % 4000) / 4000.0F;
+        D2D1_COLOR_F ambient = primary;
+        ambient.a = 0.08F + std::sin(phase * 6.2831853F) * 0.02F;
+        const D2D1_GRADIENT_STOP ambientStops[] = {
+            {0.0F, ambient},
+            {1.0F, D2D1_COLOR_F{0, 0, 0, 0}},
+        };
+        ComPtr<ID2D1GradientStopCollection> collection;
+        ComPtr<ID2D1RadialGradientBrush> gradient;
+        if (SUCCEEDED(target->CreateGradientStopCollection(
+                ambientStops, static_cast<UINT32>(std::size(ambientStops)), &collection)) &&
+            SUCCEEDED(target->CreateRadialGradientBrush(
+                D2D1::RadialGradientBrushProperties(
+                    D2D1::Point2F(264, 22), D2D1::Point2F(), 142, 104),
+                collection.Get(), &gradient))) {
+            target->FillEllipse(
+                D2D1::Ellipse(D2D1::Point2F(264, 22), 142, 104), gradient.Get());
+        }
+
+        trayStrokeRounded(state, {0.5F, 0.5F, trayMenuWidth - 0.5F,
+                                  trayMenuHeight - 0.5F}, 16,
+                          blendColor(border, primary, 0.16F));
+        trayDrawGlow(state, {18, 16, 48, 46}, 9, primary, 0.48F);
+        trayFillAccentGradient(state, {18, 16, 48, 46}, 9);
+        trayDrawCenteredText(state, L"N", {18, 16, 48, 46},
+                             state.trayMenuTitleFormat.Get(), white);
+        trayDrawText(state, L"NexPlay", {58, 18, 150, 42},
+                     state.trayMenuTitleFormat.Get(), white);
+
+        const bool running = state.engine.isRunning();
+        const D2D1_COLOR_F statusColor = running ? green : muted;
+        state.trayMenuBrush->SetColor(statusColor);
+        target->FillEllipse(D2D1::Ellipse(D2D1::Point2F(224, 31), 3, 3),
+                            state.trayMenuBrush.Get());
+        trayDrawText(state, running ? L"AKTYWNY" : L"GOTOWY", {234, 24, 292, 42},
+                     state.trayMenuSmallFormat.Get(), statusColor);
+
+        drawTrayMenuRow(state, 0, trayShowRect, L"Otwórz NexPlay", true);
+        drawTrayMenuRow(state, 1, traySaveRect, L"Zapisz klip", running);
+        const std::wstring shortcut =
+            hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk);
+        const D2D1_COLOR_F shortcutColor = running ? muted : blendColor(muted, background, 0.40F);
+        trayFillRounded(state, {200, 127, 284, 150}, 6,
+                        running ? field : blendColor(field, background, 0.48F));
+        trayStrokeRounded(state, {200, 127, 284, 150}, 6,
+                          running ? border : blendColor(border, background, 0.50F));
+        trayDrawCenteredText(state, shortcut, {202, 127, 282, 150},
+                             state.trayMenuSmallFormat.Get(), shortcutColor);
+
+        state.trayMenuBrush->SetColor(border);
+        target->DrawLine(D2D1::Point2F(22, 173), D2D1::Point2F(288, 173),
+                         state.trayMenuBrush.Get(), 1.0F);
+        drawTrayMenuRow(state, 2, trayExitRect, L"Zakończ NexPlay", true, true);
+
+        if (target->EndDraw() == D2DERR_RECREATE_TARGET) {
+            state.trayMenuBrush.Reset();
+            state.trayMenuRenderTarget.Reset();
+        }
+    } catch (...) {
+        state.trayMenuBrush.Reset();
+        state.trayMenuRenderTarget.Reset();
+    }
+    EndPaint(window, &paint);
+}
+
+[[nodiscard]] int trayMenuItemAt(const AppState& state, const float x, const float y) {
+    if (trayShowRect.contains(x, y)) return 0;
+    if (traySaveRect.contains(x, y) && state.engine.isRunning()) return 1;
+    if (trayExitRect.contains(x, y)) return 2;
+    return -1;
+}
+
+void executeTrayMenuItem(const HWND menuWindow, AppState& state, const int item) {
+    ShowWindow(menuWindow, SW_HIDE);
+    if (item == 0) {
+        SetTimer(state.mainWindow, 1, 16, nullptr);
+        ShowWindow(state.mainWindow, SW_RESTORE);
+        SetForegroundWindow(state.mainWindow);
+    } else if (item == 1 && state.engine.isRunning()) {
+        saveClip(state.mainWindow, state);
+    } else if (item == 2) {
+        stopRecorder(state.mainWindow, state);
+        DestroyWindow(state.mainWindow);
+    }
+}
+
+LRESULT CALLBACK trayMenuWindowProcedure(
+    const HWND window, const UINT message, const WPARAM wParam, const LPARAM lParam) {
+    auto* state = reinterpret_cast<AppState*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (message == WM_NCCREATE) {
+        const auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
+        state = static_cast<AppState*>(create->lpCreateParams);
+        SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
+    }
+    switch (message) {
+    case WM_CREATE: {
+        const int darkMode = TRUE;
+        DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                              &darkMode, sizeof(darkMode));
+        const DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
+        DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE,
+                              &corner, sizeof(corner));
+        return 0;
+    }
+    case WM_SHOWWINDOW:
+        if (wParam) SetTimer(window, 1, 16, nullptr);
+        else KillTimer(window, 1);
+        return 0;
+    case WM_PAINT:
+        if (state != nullptr) paintTrayMenu(window, *state);
+        return 0;
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_MOUSEMOVE:
+        if (state != nullptr) {
+            TRACKMOUSEEVENT tracking{sizeof(tracking), TME_LEAVE, window, 0};
+            TrackMouseEvent(&tracking);
+            const int hover = trayMenuItemAt(
+                *state, static_cast<float>(GET_X_LPARAM(lParam)),
+                static_cast<float>(GET_Y_LPARAM(lParam)));
+            if (hover != state->trayMenuHover) {
+                state->trayMenuHover = hover;
+                InvalidateRect(window, nullptr, FALSE);
+            }
+        }
+        return 0;
+    case WM_MOUSELEAVE:
+        if (state != nullptr) {
+            state->trayMenuHover = -1;
+            InvalidateRect(window, nullptr, FALSE);
+        }
+        return 0;
+    case WM_LBUTTONUP:
+        if (state != nullptr) {
+            const int item = trayMenuItemAt(
+                *state, static_cast<float>(GET_X_LPARAM(lParam)),
+                static_cast<float>(GET_Y_LPARAM(lParam)));
+            if (item >= 0) executeTrayMenuItem(window, *state, item);
+        }
+        return 0;
+    case WM_ACTIVATE:
+        if (LOWORD(wParam) == WA_INACTIVE) ShowWindow(window, SW_HIDE);
+        return 0;
+    case WM_KEYDOWN:
+        if (wParam == VK_ESCAPE) {
+            ShowWindow(window, SW_HIDE);
+        } else if (state != nullptr && (wParam == VK_DOWN || wParam == VK_UP)) {
+            const int direction = wParam == VK_DOWN ? 1 : -1;
+            int next = state->trayMenuHover;
+            if (next < 0) next = direction > 0 ? -1 : 0;
+            for (int attempt = 0; attempt < 3; ++attempt) {
+                next = (next + direction + 3) % 3;
+                if (next != 1 || state->engine.isRunning()) break;
+            }
+            state->trayMenuHover = next;
+            InvalidateRect(window, nullptr, FALSE);
+        } else if (state != nullptr && wParam == VK_RETURN && state->trayMenuHover >= 0) {
+            executeTrayMenuItem(window, *state, state->trayMenuHover);
+        }
+        return 0;
+    case WM_SETCURSOR:
+        if (state != nullptr && LOWORD(lParam) == HTCLIENT && state->trayMenuHover >= 0) {
+            SetCursor(LoadCursorW(nullptr, IDC_HAND));
+            return TRUE;
+        }
+        break;
+    case WM_TIMER:
+        if (state != nullptr) {
+            bool changed = false;
+            for (std::size_t index = 0; index < state->trayMenuHoverAnimation.size(); ++index) {
+                const float target = state->trayMenuHover == static_cast<int>(index) ? 1.0F : 0.0F;
+                const float before = state->trayMenuHoverAnimation[index];
+                state->trayMenuHoverAnimation[index] += (target - before) * 0.20F;
+                if (std::abs(target - state->trayMenuHoverAnimation[index]) < 0.006F) {
+                    state->trayMenuHoverAnimation[index] = target;
+                }
+                changed = changed || before != state->trayMenuHoverAnimation[index];
+            }
+            if (changed || state->engine.isRunning()) InvalidateRect(window, nullptr, FALSE);
+        }
+        return 0;
+    case WM_CLOSE:
+        ShowWindow(window, SW_HIDE);
+        return 0;
+    case WM_SIZE:
+        if (state != nullptr && state->trayMenuRenderTarget != nullptr &&
+            LOWORD(lParam) > 0 && HIWORD(lParam) > 0) {
+            state->trayMenuRenderTarget->Resize(
+                D2D1::SizeU(LOWORD(lParam), HIWORD(lParam)));
+        }
+        return 0;
+    case WM_DESTROY:
+        KillTimer(window, 1);
+        if (state != nullptr) {
+            state->trayMenuBrush.Reset();
+            state->trayMenuRenderTarget.Reset();
+            if (state->trayMenuWindow == window) state->trayMenuWindow = nullptr;
+        }
+        return 0;
+    default:
+        break;
+    }
+    return DefWindowProcW(window, message, wParam, lParam);
+}
+
+void showTrayMenu(const HWND window, AppState& state) {
+    if (state.trayMenuWindow == nullptr) {
+        state.trayMenuWindow = CreateWindowExW(
+            WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            trayMenuWindowClassName, L"NexPlay",
+            WS_POPUP, 0, 0,
+            static_cast<int>(trayMenuWidth), static_cast<int>(trayMenuHeight),
+            window, nullptr, GetModuleHandleW(nullptr), &state);
+    }
+    if (state.trayMenuWindow == nullptr) return;
+
     POINT cursor{};
     GetCursorPos(&cursor);
-    const HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, idTrayShow, L"Pokaż NexPlay");
-    const std::wstring saveLabel = L"Zapisz klip (" +
-        hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk) + L")";
-    AppendMenuW(menu, MF_STRING | (state.engine.isRunning() ? MF_ENABLED : MF_GRAYED),
-                idTraySave, saveLabel.c_str());
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, idTrayExit, L"Zakończ");
-    SetForegroundWindow(window);
-    TrackPopupMenu(menu, TPM_RIGHTBUTTON, cursor.x, cursor.y, 0, window, nullptr);
-    DestroyMenu(menu);
-    PostMessageW(window, WM_NULL, 0, 0);
+    MONITORINFO monitor{sizeof(monitor)};
+    GetMonitorInfoW(MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST), &monitor);
+    const int width = static_cast<int>(trayMenuWidth);
+    const int height = static_cast<int>(trayMenuHeight);
+    int x = cursor.x - width + 18;
+    int y = cursor.y - height - 10;
+    if (y < monitor.rcWork.top) y = cursor.y + 10;
+    x = std::clamp(x, static_cast<int>(monitor.rcWork.left) + 8,
+                   static_cast<int>(monitor.rcWork.right) - width - 8);
+    y = std::clamp(y, static_cast<int>(monitor.rcWork.top) + 8,
+                   static_cast<int>(monitor.rcWork.bottom) - height - 8);
+
+    state.trayMenuHover = -1;
+    SetWindowPos(state.trayMenuWindow, HWND_TOPMOST, x, y, width, height,
+                 SWP_SHOWWINDOW);
+    SetForegroundWindow(state.trayMenuWindow);
+    SetFocus(state.trayMenuWindow);
+    InvalidateRect(state.trayMenuWindow, nullptr, FALSE);
 }
 
 [[nodiscard]] int clipIndexAt(const AppState& state, const float x, const float y) {
@@ -3262,23 +3664,12 @@ LRESULT CALLBACK windowProcedure(
         return 0;
     case trayMessage:
         if (state != nullptr && (lParam == WM_LBUTTONUP || lParam == WM_LBUTTONDBLCLK)) {
+            if (state->trayMenuWindow != nullptr) ShowWindow(state->trayMenuWindow, SW_HIDE);
             SetTimer(window, 1, 16, nullptr);
             ShowWindow(window, SW_RESTORE);
             SetForegroundWindow(window);
         } else if (state != nullptr && lParam == WM_RBUTTONUP) {
             showTrayMenu(window, *state);
-        }
-        return 0;
-    case WM_COMMAND:
-        if (state != nullptr && LOWORD(wParam) == idTrayShow) {
-            SetTimer(window, 1, 16, nullptr);
-            ShowWindow(window, SW_RESTORE);
-            SetForegroundWindow(window);
-        } else if (state != nullptr && LOWORD(wParam) == idTraySave) {
-            saveClip(window, *state);
-        } else if (state != nullptr && LOWORD(wParam) == idTrayExit) {
-            stopRecorder(window, *state);
-            DestroyWindow(window);
         }
         return 0;
     case WM_SIZE:
@@ -3292,6 +3683,10 @@ LRESULT CALLBACK windowProcedure(
             closeEditorPlayer(*state);
             state->engine.stop();
             KillTimer(window, 1);
+            if (state->trayMenuWindow != nullptr) {
+                DestroyWindow(state->trayMenuWindow);
+                state->trayMenuWindow = nullptr;
+            }
             if (keyboardHook != nullptr) {
                 UnhookWindowsHookEx(keyboardHook);
                 keyboardHook = nullptr;
@@ -3343,6 +3738,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
     fullscreenClass.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
     fullscreenClass.lpszClassName = fullscreenWindowClassName;
     RegisterClassExW(&fullscreenClass);
+
+    WNDCLASSEXW trayMenuClass{sizeof(trayMenuClass)};
+    trayMenuClass.style = CS_HREDRAW | CS_VREDRAW;
+    trayMenuClass.lpfnWndProc = trayMenuWindowProcedure;
+    trayMenuClass.hInstance = instance;
+    trayMenuClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    trayMenuClass.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    trayMenuClass.lpszClassName = trayMenuWindowClassName;
+    RegisterClassExW(&trayMenuClass);
 
     AppState state;
     const int x = std::max(0, (GetSystemMetrics(SM_CXSCREEN) - static_cast<int>(windowWidth)) / 2);
