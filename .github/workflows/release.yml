@@ -1,0 +1,49 @@
+name: GitHub Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure Release
+        run: cmake --preset windows-x64-release
+
+      - name: Build Release
+        run: cmake --build --preset windows-x64-release
+
+      - name: Run tests
+        run: ctest --test-dir out/build/windows-x64-release -C Release --output-on-failure
+
+      - name: Create distribution archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/NexPlay | Out-Null
+          Copy-Item out/build/windows-x64-release/Release/nexplay.exe dist/NexPlay/
+          Copy-Item README.md dist/NexPlay/
+          Copy-Item release/README.txt dist/NexPlay/
+          Compress-Archive -Path dist/NexPlay -DestinationPath "dist/NexPlay-${{ github.ref_name }}-windows-x64.zip"
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "dist/NexPlay-${{ github.ref_name }}-windows-x64.zip" `
+            --title "NexPlay ${{ github.ref_name }}" `
+            --generate-notes `
+            --verify-tag

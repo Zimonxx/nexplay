@@ -1,0 +1,6 @@
+[submodule "third_party/nv-codec-headers"]
+	path = third_party/nv-codec-headers
+	url = https://github.com/FFmpeg/nv-codec-headers.git
+[submodule "third_party/windows-classic-samples"]
+	path = third_party/windows-classic-samples
+	url = https://github.com/microsoft/Windows-classic-samples.git
