@@ -286,6 +286,7 @@ struct AppState final {
     bool playing{};
     bool fullscreen{};
     bool fullscreenScrubbing{};
+    int embeddedVideoRefreshFrames{};
     bool clipContextMenuOpen{};
     std::filesystem::path clipContextMenuClip;
     Rect clipContextMenuRect{};
@@ -363,6 +364,15 @@ LRESULT CALLBACK videoWindowProcedure(
         owner = static_cast<HWND>(create->lpCreateParams);
         SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(owner));
     }
+    auto* state = owner != nullptr
+        ? reinterpret_cast<AppState*>(GetWindowLongPtrW(owner, GWLP_USERDATA))
+        : nullptr;
+    IMFPMediaPlayer* player = nullptr;
+    if (state != nullptr) {
+        player = window == state->fullscreenVideoWindow
+            ? state->fullscreenPlayer.Get()
+            : state->mediaPlayer.Get();
+    }
     if (message == WM_KEYDOWN &&
         (wParam == VK_SPACE || wParam == VK_LEFT || wParam == VK_RIGHT ||
          wParam == VK_HOME || wParam == VK_END)) {
@@ -382,14 +392,24 @@ LRESULT CALLBACK videoWindowProcedure(
         if (owner != nullptr) PostMessageW(owner, exitFullscreenMessage, 0, 0);
         return 0;
     }
+    if (message == WM_PAINT) {
+        PAINTSTRUCT paint{};
+        BeginPaint(window, &paint);
+        if (player != nullptr) {
+            player->UpdateVideo();
+        } else {
+            FillRect(paint.hdc, &paint.rcPaint,
+                     reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+        }
+        EndPaint(window, &paint);
+        return 0;
+    }
+    if (message == WM_SIZE || (message == WM_SHOWWINDOW && wParam != FALSE)) {
+        if (player != nullptr) player->UpdateVideo();
+        InvalidateRect(window, nullptr, FALSE);
+        return 0;
+    }
     if (message == WM_ERASEBKGND) {
-        const RECT area = [] (const HWND target) {
-            RECT rectangle{};
-            GetClientRect(target, &rectangle);
-            return rectangle;
-        }(window);
-        FillRect(reinterpret_cast<HDC>(wParam), &area,
-                 reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
         return 1;
     }
     return DefWindowProcW(window, message, wParam, lParam);
@@ -2492,6 +2512,11 @@ void updateEditorVisibility(AppState& state) {
             if (state.mediaPlayer != nullptr) state.mediaPlayer->UpdateVideo();
         }
         ShowWindow(state.videoWindow, state.page == Page::editor ? SW_SHOW : SW_HIDE);
+        if (state.page == Page::editor) {
+            state.embeddedVideoRefreshFrames = std::max(
+                state.embeddedVideoRefreshFrames, 18);
+            InvalidateRect(state.videoWindow, nullptr, FALSE);
+        }
     }
 }
 
@@ -2563,6 +2588,7 @@ void closeEditorPlayer(AppState& state) {
     state.mediaPlayer.Reset();
     if (state.videoWindow != nullptr) ShowWindow(state.videoWindow, SW_HIDE);
     state.playing = false;
+    state.embeddedVideoRefreshFrames = 0;
     state.dragHandle = DragHandle::none;
 }
 
@@ -2636,7 +2662,9 @@ void exitFullscreen(AppState& state) {
     seekEditor(state, position);
     if (resumePlayback && state.mediaPlayer != nullptr) state.mediaPlayer->Play();
     SetFocus(state.mainWindow);
-    if (state.mediaPlayer != nullptr) state.mediaPlayer->UpdateVideo();
+    state.embeddedVideoRefreshFrames = 45;
+    InvalidateRect(state.videoWindow, nullptr, FALSE);
+    UpdateWindow(state.videoWindow);
 }
 
 void openEditor(const HWND window, AppState& state, const std::filesystem::path& clip) {
@@ -2667,7 +2695,9 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
         return;
     }
     state.playing = true;
-    state.mediaPlayer->UpdateVideo();
+    state.embeddedVideoRefreshFrames = 90;
+    InvalidateRect(state.videoWindow, nullptr, FALSE);
+    UpdateWindow(state.videoWindow);
     InvalidateRect(window, nullptr, FALSE);
 }
 
@@ -4384,7 +4414,18 @@ LRESULT CALLBACK windowProcedure(
             const float autoBufferTarget = state->autoBuffer ? 1.0F : 0.0F;
             state->autoBufferAnimation +=
                 (autoBufferTarget - state->autoBufferAnimation) * 0.20F;
-            if (state->page == Page::editor) updateEditorPlayback(*state);
+            if (state->page == Page::editor) {
+                updateEditorPlayback(*state);
+                if (!state->fullscreen && state->mediaPlayer != nullptr &&
+                    state->videoWindow != nullptr &&
+                    state->embeddedVideoRefreshFrames > 0) {
+                    --state->embeddedVideoRefreshFrames;
+                    if (state->embeddedVideoRefreshFrames % 6 == 0 ||
+                        state->embeddedVideoRefreshFrames < 4) {
+                        InvalidateRect(state->videoWindow, nullptr, FALSE);
+                    }
+                }
+            }
             if (state->fullscreenWindow != nullptr) {
                 InvalidateRect(state->fullscreenWindow, nullptr, FALSE);
             }
