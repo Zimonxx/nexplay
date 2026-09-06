@@ -135,6 +135,8 @@ cmake --build --preset windows-x64-release --target nexplay_ui_preview
 
 Podglądy zawierają dane testowe. Narzędzie nie otwiera okna, nie nagrywa ekranu i nie instaluje skrótów. Nie zastępuje ręcznej kontroli odtwarzania ani systemowych animacji okna.
 
+Opcjonalny argument `--window-frame` uruchamia dodatkowo test geometrii ramki na osobnym, niewidocznym oknie, bez uruchamiania nagrywarki. Zamiast tej opcji można podać ścieżkę do krótkiego pliku testowego MP4 (co najmniej 61 klatek), aby porównać miniatury z pełnym dekodowaniem przez FFmpeg.
+
 ## Wydania
 
 Tag w formacie `vX.Y.Z` uruchamia automatyczne budowanie paczki i publikację wydania na GitHubie:

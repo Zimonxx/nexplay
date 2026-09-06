@@ -53,6 +53,15 @@ float windowWidth = 1240.0F;
 float windowHeight = 820.0F;
 constexpr float trayMenuWidth = 310.0F;
 constexpr float trayMenuHeight = 238.0F;
+constexpr DWORD mainWindowStyle = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
+constexpr DWORD mainWindowExStyle = WS_EX_APPWINDOW;
+
+void initializeCustomFrame(HWND window) {
+    // WS_CAPTION stays for native maximize/restore transitions. Force Windows to
+    // recalculate the non-client area before the first visible frame.
+    SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
 
 constexpr D2D1_COLOR_F background = {0.035F, 0.039F, 0.047F, 1.0F};
 constexpr D2D1_COLOR_F sidebar = {0.048F, 0.052F, 0.063F, 1.0F};
@@ -3942,8 +3951,8 @@ LRESULT CALLBACK windowProcedure(
     case WM_ERASEBKGND:
         return 1;
     case WM_NCHITTEST: {
-        const LRESULT standard = DefWindowProcW(window, message, wParam, lParam);
-        if (standard != HTCLIENT) return standard;
+        // All caption controls are client-drawn; do not let the invisible native
+        // caption claim clicks meant for our minimize/maximize/close buttons.
         POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ScreenToClient(window, &point);
         if (!IsZoomed(window)) {
@@ -4470,8 +4479,11 @@ LRESULT CALLBACK windowProcedure(
         return 0;
     case WM_NCCALCSIZE:
         // Keep WS_CAPTION for DWM transitions; draw our own client-side titlebar.
-        if (wParam != FALSE) return 0;
-        break;
+        // FALSE is used during initial creation too, not just TRUE during resize.
+        return 0;
+    case WM_NCACTIVATE:
+        // Update activation without asking Windows to repaint a standard caption.
+        return DefWindowProcW(window, message, wParam, -1);
     case WM_DESTROY:
         if (state != nullptr) {
             saveAccentColor(*state);
@@ -4511,7 +4523,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
     windowClass.hInstance = instance;
     windowClass.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    windowClass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    windowClass.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
     windowClass.lpszClassName = windowClassName;
     windowClass.hIconSm = windowClass.hIcon;
     RegisterClassExW(&windowClass);
@@ -4543,13 +4555,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
     RegisterClassExW(&trayMenuClass);
 
     AppState state;
-    constexpr DWORD mainWindowStyle =
-        WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
-    constexpr DWORD mainWindowExStyle = WS_EX_APPWINDOW;
-    RECT initialArea{0, 0, static_cast<LONG>(windowWidth), static_cast<LONG>(windowHeight)};
-    AdjustWindowRectEx(&initialArea, mainWindowStyle, FALSE, mainWindowExStyle);
-    const int initialWidth = initialArea.right - initialArea.left;
-    const int initialHeight = initialArea.bottom - initialArea.top;
+    // Our client rectangle is the whole window, so no native caption padding.
+    const int initialWidth = static_cast<int>(windowWidth);
+    const int initialHeight = static_cast<int>(windowHeight);
     const int x = std::max(0, (GetSystemMetrics(SM_CXSCREEN) - initialWidth) / 2);
     const int y = std::max(0, (GetSystemMetrics(SM_CYSCREEN) - initialHeight) / 2);
     const HWND window = CreateWindowExW(
@@ -4560,6 +4568,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
         CoUninitialize();
         return 1;
     }
+    initializeCustomFrame(window);
     const bool launchedAtStartup =
         commandLine != nullptr && wcsstr(commandLine, L"--autostart") != nullptr;
     if (launchedAtStartup) {

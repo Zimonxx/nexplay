@@ -3,6 +3,54 @@
 #include <iostream>
 
 namespace {
+// An isolated, never-shown test window. Route only non-client messages through
+// the production procedure: no app startup, capture, settings, tray or hotkeys.
+LRESULT CALLBACK frameTestProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_NCCALCSIZE || message == WM_NCHITTEST || message == WM_NCACTIVATE)
+        return windowProcedure(window, message, wParam, lParam);
+    return DefWindowProcW(window, message, wParam, lParam);
+}
+void validateNativeFrame() {
+    WNDCLASSW type{};
+    type.lpfnWndProc = frameTestProcedure;
+    type.hInstance = GetModuleHandleW(nullptr);
+    type.lpszClassName = L"NexPlayIsolatedFrameTest";
+    if (!RegisterClassW(&type))
+        throw std::runtime_error("Cannot register frame test");
+    computeLayout(1240, 820);
+    HWND window = CreateWindowExW(mainWindowExStyle, type.lpszClassName, L"Frame geometry test",
+                                  mainWindowStyle, 100, 100, 1240, 820, nullptr, nullptr,
+                                  type.hInstance, nullptr);
+    if (!window)
+        throw std::runtime_error("Cannot create hidden frame test");
+    const auto coversWholeWindow = [&] {
+        RECT outer{}, client{};
+        GetWindowRect(window, &outer);
+        GetClientRect(window, &client);
+        POINT origin{};
+        ClientToScreen(window, &origin);
+        return origin.x == outer.left && origin.y == outer.top &&
+               client.right == outer.right - outer.left &&
+               client.bottom == outer.bottom - outer.top;
+    };
+    const auto hit = [&](int x, int y) {
+        POINT point{x, y};
+        ClientToScreen(window, &point);
+        return SendMessageW(window, WM_NCHITTEST, 0, MAKELPARAM(point.x, point.y));
+    };
+    bool valid = coversWholeWindow();
+    initializeCustomFrame(window);
+    valid = valid && coversWholeWindow() && hit(1170, 22) == HTCLIENT &&
+            hit(500, 22) == HTCAPTION && hit(2, 400) == HTLEFT;
+    SetWindowPos(window, nullptr, 0, 0, 1400, 900, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    valid = valid && coversWholeWindow();
+    DestroyWindow(window);
+    UnregisterClassW(type.lpszClassName, type.hInstance);
+    if (!valid)
+        throw std::runtime_error("Native title bar space or hit targets leaked into custom frame");
+    std::cout << "Native frame geometry passed at creation and resize; custom buttons remain "
+                 "client controls.\n";
+}
 // A lossless in-memory test bitmap: its circle exposes stretched thumbnails.
 // This is fixture data, not a bundled application asset or a user's recording.
 std::vector<std::uint8_t> previewFixture(const int width, const int height) {
@@ -191,8 +239,12 @@ int wmain(int argc, wchar_t **argv) {
         return 3;
     int result = 0;
     try {
-        if (argc == 3)
-            validateFrameDecoder(argv[2]);
+        if (argc == 3) {
+            if (std::wstring(argv[2]) == L"--window-frame")
+                validateNativeFrame();
+            else
+                validateFrameDecoder(argv[2]);
+        }
         const std::filesystem::path folder = argv[1];
         std::filesystem::create_directories(folder);
         for (float width : {1080.0F, 1240.0F, 1920.0F, 2560.0F}) {
