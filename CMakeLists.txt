@@ -110,6 +110,16 @@ target_link_libraries(nexplay_replay_test PRIVATE
 
 enable_testing()
 
+add_executable(preview_audio_tests tests/PreviewAudioTests.cpp src/playback/PreviewAudio.cpp)
+target_compile_features(preview_audio_tests PRIVATE cxx_std_20)
+target_compile_definitions(preview_audio_tests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_include_directories(preview_audio_tests PRIVATE src)
+target_link_libraries(preview_audio_tests PRIVATE mf mfplay mfplat mfuuid ole32)
+if(MSVC)
+    target_compile_options(preview_audio_tests PRIVATE /W4 /permissive- /utf-8)
+endif()
+add_test(NAME preview_audio_policy COMMAND preview_audio_tests)
+
 add_executable(replay_segment_buffer_tests
     tests/ReplaySegmentBufferTests.cpp
     src/storage/ReplaySegmentBuffer.cpp
@@ -209,6 +219,7 @@ target_link_libraries(nexplay_av_replay_test PRIVATE
 
 add_executable(nexplay WIN32
     src/gui_main.cpp
+    src/playback/PreviewAudio.cpp
     src/app/RecorderEngine.cpp
     src/audio/AudioSessionScanner.cpp
     src/audio/PcmAudioCapture.cpp
@@ -244,6 +255,7 @@ target_link_libraries(nexplay PRIVATE
     dxgi
     d3dcompiler
     mfplay
+    mf
     mfplat
     mfuuid
     mmdevapi

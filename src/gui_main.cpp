@@ -1,5 +1,6 @@
 #include "app/RecorderEngine.h"
 #include "audio/AudioSessionScanner.h"
+#include "playback/PreviewAudio.h"
 
 #include <Windows.h>
 #include <windowsx.h>
@@ -336,6 +337,7 @@ struct AppState final {
     double trimStart{};
     double trimEnd{};
     std::vector<EditorAudioTrack> editorAudioTracks;
+    nexplay::playback::PreviewAudio previewAudio;
     int editorAudioScroll{};
     int activeEditorAudioTrack{-1};
     bool mergeEditorAudio{};
@@ -2462,7 +2464,8 @@ void refreshClips(const HWND window, AppState& state) {
 
 void closeEditorPlayer(AppState& state) {
     if (state.fullscreen) exitFullscreen(state);
-    if (state.mediaPlayer != nullptr) state.mediaPlayer->Pause();
+    state.previewAudio.close();
+    if (state.mediaPlayer != nullptr) state.mediaPlayer->Shutdown();
     state.mediaPlayer.Reset();
     if (state.videoWindow != nullptr) ShowWindow(state.videoWindow, SW_HIDE);
     state.playing = false;
@@ -2479,6 +2482,7 @@ void enterFullscreen(AppState& state) {
     const double position = state.playPosition;
     const bool resumePlayback = state.playing;
     if (state.mediaPlayer != nullptr) state.mediaPlayer->Pause();
+    state.previewAudio.pause();
 
     state.fullscreenWindow = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
@@ -2509,6 +2513,7 @@ void enterFullscreen(AppState& state) {
         return;
     }
     state.fullscreen = true;
+    state.fullscreenPlayer->SetMute(TRUE);
     state.activeField = HitTarget::none;
     seekEditor(state, position);
     if (resumePlayback) state.fullscreenPlayer->Play();
@@ -2523,7 +2528,8 @@ void exitFullscreen(AppState& state) {
     updateEditorPlayback(state);
     const double position = state.playPosition;
     const bool resumePlayback = state.playing;
-    if (state.fullscreenPlayer != nullptr) state.fullscreenPlayer->Pause();
+    state.previewAudio.pause();
+    if (state.fullscreenPlayer != nullptr) state.fullscreenPlayer->Shutdown();
     state.fullscreenPlayer.Reset();
     state.fullscreenRenderTarget.Reset();
     state.fullscreenBrush.Reset();
@@ -2565,18 +2571,35 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
     updateEditorVisibility(state);
     ShowWindow(state.videoWindow, SW_SHOW);
     const HRESULT result = MFPCreateMediaPlayer(
-        clip.c_str(), TRUE, 0, nullptr, state.videoWindow, &state.mediaPlayer);
+        clip.c_str(), FALSE, 0, nullptr, state.videoWindow, &state.mediaPlayer);
     if (FAILED(result)) {
         closeEditorPlayer(state);
         state.page = Page::clips;
         setStatus(window, state, L"Błąd: nie można otworzyć podglądu klipu");
         return;
     }
+    state.mediaPlayer->SetMute(TRUE);
+    try {
+        std::vector<nexplay::playback::AudioSelection> tracks;
+        tracks.resize(state.editorAudioTracks.size());
+        state.previewAudio.open(clip, tracks);
+    } catch (...) {
+        setStatus(window, state, L"Błąd: nie można przygotować odsłuchu ścieżek; podgląd pozostaje wyciszony");
+    }
+    state.mediaPlayer->Play();
     state.playing = true;
     state.embeddedVideoRefreshFrames = 90;
     InvalidateRect(state.videoWindow, nullptr, FALSE);
     UpdateWindow(state.videoWindow);
     InvalidateRect(window, nullptr, FALSE);
+}
+
+void updatePreviewAudio(AppState& state) {
+    std::vector<nexplay::playback::AudioSelection> tracks;
+    for (const auto& track : state.editorAudioTracks) {
+        tracks.push_back({track.included, track.start, track.end});
+    }
+    state.previewAudio.update(tracks, state.playPosition, state.playing);
 }
 
 void updateEditorPlayback(AppState& state) {
@@ -2611,6 +2634,7 @@ void updateEditorPlayback(AppState& state) {
     if (SUCCEEDED(player->GetState(&playerState))) {
         state.playing = playerState == MFP_MEDIAPLAYER_STATE_PLAYING;
     }
+    updatePreviewAudio(state);
 }
 
 void seekEditor(AppState& state, const double seconds) {
@@ -2623,6 +2647,8 @@ void seekEditor(AppState& state, const double seconds) {
     position.hVal.QuadPart = static_cast<LONGLONG>(seconds * 10'000'000.0);
     player->SetPosition(MFP_POSITIONTYPE_100NS, &position);
     state.playPosition = seconds;
+    state.previewAudio.seek(seconds);
+    updatePreviewAudio(state);
 }
 
 [[nodiscard]] IMFPMediaPlayer* activeEditorPlayer(AppState& state) {
@@ -2636,6 +2662,7 @@ void toggleEditorPlayback(AppState& state) {
         if (state.playing) player->Pause();
         else player->Play();
         state.playing = !state.playing;
+        updatePreviewAudio(state);
     }
 }
 
@@ -3008,6 +3035,7 @@ void exportEditor(const HWND window, AppState& state) {
         return;
     }
     if (state.mediaPlayer != nullptr) state.mediaPlayer->Pause();
+    state.previewAudio.pause();
     state.playing = false;
     setStatus(window, state,
               state.cutEditorSelection
@@ -3626,6 +3654,11 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
     switch (clicked) {
     case HitTarget::minimize:
     case HitTarget::close:
+        if (state.page == Page::editor && state.mediaPlayer != nullptr) {
+            state.mediaPlayer->Pause();
+            state.previewAudio.pause();
+            state.playing = false;
+        }
         KillTimer(window, 1);
         ShowWindow(window, SW_HIDE);
         setStatus(window, state, L"NexPlay działa w zasobniku systemowym");
@@ -3806,6 +3839,7 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
         if (index >= 0 && index < static_cast<int>(state.editorAudioTracks.size())) {
             auto& track = state.editorAudioTracks[static_cast<std::size_t>(index)];
             track.included = !track.included;
+            updatePreviewAudio(state);
             InvalidateRect(window, nullptr, FALSE);
         }
     } else if (state.page == Page::replay && !state.engine.isRunning() &&

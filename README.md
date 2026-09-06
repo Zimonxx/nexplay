@@ -77,7 +77,7 @@ W odtwarzaczu można przewijać nagranie bez jego modyfikowania, przełączyć o
 - Kliknij podziałkę czasu, aby przewinąć bez zmiany zakresu klipu.
 - Przeciągnij uchwyty ścieżki **V1**, aby ustawić początek i koniec.
 - W panelu eksportu przełącz **Przycinanie brzegów** na **Wycinanie fragmentu**, aby usunąć zaznaczony środek i połączyć pozostałości w jeden plik.
-- Checkboxy **A1–An** wykluczają ścieżki z eksportu; uchwyty na ścieżkach określają ich słyszalny zakres. Przewiń listę kółkiem myszy, aby zobaczyć kolejne ścieżki.
+- Checkboxy **A1–An** wyciszają ścieżki w podglądzie i wykluczają je z eksportu; uchwyty na ścieżkach określają ich słyszalny zakres również podczas odsłuchu. Wyciszenia pozostają aktywne na pełnym ekranie. Przewiń listę kółkiem myszy, aby zobaczyć kolejne ścieżki.
 - Wpisz nazwę nowego pliku, opcjonalnie włącz **Jedna ścieżka audio** i wybierz **Eksportuj klip**. Oryginał pozostaje bez zmian.
 
 ## Budowanie ze źródeł
