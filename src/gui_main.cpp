@@ -4,6 +4,8 @@
 #include "audio/AudioSessionScanner.h"
 #include "playback/PreviewAudio.h"
 #include "playback/ThumbnailSelection.h"
+#include "platform/windows/MediaTools.h"
+#include "resources/resource.h"
 
 #include <Windows.h>
 #include <windowsx.h>
@@ -50,6 +52,7 @@ constexpr UINT thumbnailReadyMessage = WM_APP + 6;
 constexpr UINT clearEditorFocusMessage = WM_APP + 7;
 constexpr UINT togglePlaybackMessage = WM_APP + 8;
 constexpr UINT saveProgressMessage = WM_APP + 9;
+constexpr UINT activateInstanceMessage = WM_APP + 10;
 constexpr int saveHotkeyId = 1;
 constexpr int stopHotkeyId = 2;
 float windowWidth = 1240.0F;
@@ -829,14 +832,11 @@ void savePersistentRecordingSettings(const AppState& state) {
 }
 
 [[nodiscard]] DWORD runHiddenProcess(const std::vector<std::wstring>& arguments) {
-    std::wstring commandLine;
-    for (const auto& argument : arguments) {
-        if (!commandLine.empty()) commandLine.push_back(L' ');
-        commandLine.append(argument);
-    }
+    auto command = nexplay::platform::prepareMediaCommand(arguments);
+    if (!command) return ERROR_FILE_NOT_FOUND;
     STARTUPINFOW startup{sizeof(startup)};
     PROCESS_INFORMATION process{};
-    if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, FALSE,
+    if (!CreateProcessW(command->executable.c_str(), command->line.data(), nullptr, nullptr, FALSE,
                         CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) {
         return GetLastError();
     }
@@ -850,11 +850,8 @@ void savePersistentRecordingSettings(const AppState& state) {
 
 [[nodiscard]] std::string runHiddenProcessCapture(
     const std::vector<std::wstring>& arguments) {
-    std::wstring commandLine;
-    for (const auto& argument : arguments) {
-        if (!commandLine.empty()) commandLine.push_back(L' ');
-        commandLine.append(argument);
-    }
+    auto command = nexplay::platform::prepareMediaCommand(arguments);
+    if (!command) return {};
     SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
     HANDLE readPipe{};
     HANDLE writePipe{};
@@ -866,7 +863,7 @@ void savePersistentRecordingSettings(const AppState& state) {
     startup.hStdError = writePipe;
     startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
     PROCESS_INFORMATION process{};
-    if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, TRUE,
+    if (!CreateProcessW(command->executable.c_str(), command->line.data(), nullptr, nullptr, TRUE,
                         CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS,
                         nullptr, nullptr, &startup, &process)) {
         CloseHandle(readPipe);
@@ -4035,7 +4032,9 @@ LRESULT CALLBACK windowProcedure(
         state->tray.uID = 1;
         state->tray.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         state->tray.uCallbackMessage = trayMessage;
-        state->tray.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+        state->tray.hIcon = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr),
+            MAKEINTRESOURCEW(IDI_NEXPLAY), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+            GetSystemMetrics(SM_CYSMICON), LR_SHARED));
         wcscpy_s(state->tray.szTip, L"NexPlay — gotowy");
         Shell_NotifyIconW(NIM_ADD, &state->tray);
         keyboardHookWindow = window;
@@ -4612,6 +4611,11 @@ LRESULT CALLBACK windowProcedure(
     case WM_NCACTIVATE:
         // Update activation without asking Windows to repaint a standard caption.
         return DefWindowProcW(window, message, wParam, -1);
+    case activateInstanceMessage:
+        SetTimer(window, 1, 16, nullptr);
+        ShowWindow(window, IsIconic(window) ? SW_RESTORE : SW_SHOW);
+        SetForegroundWindow(window);
+        return 0;
     case WM_DESTROY:
         if (state != nullptr) {
             saveAccentColor(*state);
@@ -4647,6 +4651,30 @@ LRESULT CALLBACK windowProcedure(
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCommand) {
+    // Package smoke test: no UI, settings, hooks, recording or microphone access.
+    if (commandLine && wcscmp(commandLine, L"--verify-installation") == 0) {
+        const auto directory = nexplay::platform::applicationDirectory();
+        if (!FindResourceW(instance, MAKEINTRESOURCEW(IDI_NEXPLAY), RT_GROUP_ICON)) return 2;
+        for (const auto* name : {L"ffmpeg.exe", L"ffprobe.exe"}) {
+            const auto tool = directory / L"tools" / L"ffmpeg" / L"bin" / name;
+            if (!nexplay::platform::isToolFile(tool) ||
+                nexplay::platform::resolveMediaTool(name) != tool ||
+                runHiddenProcess({name, L"-version"}) != 0) return 3;
+        }
+        return 0;
+    }
+    struct InstanceGuard {
+        HANDLE mutex{};
+        ~InstanceGuard() { if (mutex) CloseHandle(mutex); }
+    } guard{CreateMutexW(nullptr, FALSE, L"Local\\NexPlay.Application")};
+    const auto instanceError = GetLastError();
+    if (!guard.mutex) return 1;
+    if (instanceError == ERROR_ALREADY_EXISTS) {
+        if (const HWND existing = FindWindowW(windowClassName, nullptr))
+            PostMessageW(existing, activateInstanceMessage, 0, 0);
+        return 0;
+    }
+    SetCurrentProcessExplicitAppUserModelID(L"Zimonxx.NexPlay");
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) return 1;
 
@@ -4654,11 +4682,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
     windowClass.style = CS_HREDRAW | CS_VREDRAW;
     windowClass.lpfnWndProc = windowProcedure;
     windowClass.hInstance = instance;
-    windowClass.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    windowClass.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(IDI_NEXPLAY));
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
     windowClass.lpszClassName = windowClassName;
-    windowClass.hIconSm = windowClass.hIcon;
+    windowClass.hIconSm = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_NEXPLAY),
+        IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED));
     RegisterClassExW(&windowClass);
 
     WNDCLASSEXW videoClass{sizeof(videoClass)};

@@ -3,6 +3,8 @@
 *.h text eol=lf
 *.md text eol=lf
 *.yml text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=lf
 *.json text eol=lf
 *.sln text eol=crlf
 *.vcxproj text eol=crlf

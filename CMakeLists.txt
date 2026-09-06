@@ -1,6 +1,20 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(NexPlay VERSION 0.1.0 LANGUAGES CXX)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+project(NexPlay VERSION 0.2.0 LANGUAGES CXX RC)
+
+find_program(NEXPLAY_POWERSHELL NAMES pwsh powershell REQUIRED)
+set(NEXPLAY_ICON_FILE "${CMAKE_CURRENT_BINARY_DIR}/brand/nexplay.ico")
+add_custom_command(OUTPUT "${NEXPLAY_ICON_FILE}"
+    COMMAND "${NEXPLAY_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass
+        -File "${CMAKE_CURRENT_SOURCE_DIR}/release/Generate-BrandAssets.ps1"
+        -OutputDirectory "${CMAKE_CURRENT_BINARY_DIR}/brand"
+    DEPENDS assets/nexplay.svg release/Generate-BrandAssets.ps1
+    VERBATIM)
+add_custom_target(nexplay_brand DEPENDS "${NEXPLAY_ICON_FILE}")
+configure_file(src/resources/nexplay.rc.in "${CMAKE_CURRENT_BINARY_DIR}/nexplay.rc" @ONLY)
+set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/nexplay.rc"
+    PROPERTIES OBJECT_DEPENDS "${NEXPLAY_ICON_FILE}")
 
 add_executable(nexplay_diagnostics
     src/main.cpp
@@ -248,6 +262,7 @@ target_link_libraries(nexplay_av_replay_test PRIVATE
 )
 
 add_executable(nexplay WIN32
+    "${CMAKE_CURRENT_BINARY_DIR}/nexplay.rc"
     src/gui_main.cpp
     src/playback/PreviewAudio.cpp
     src/playback/Mp4AudioSource.cpp
@@ -262,6 +277,7 @@ add_executable(nexplay WIN32
     src/storage/ReplaySegmentBuffer.cpp
     src/storage/ReplayStorage.cpp
 )
+add_dependencies(nexplay nexplay_brand)
 target_compile_features(nexplay PRIVATE cxx_std_20)
 target_compile_definitions(nexplay PRIVATE
     UNICODE
@@ -273,6 +289,7 @@ target_compile_definitions(nexplay PRIVATE
 )
 target_include_directories(nexplay PRIVATE
     src
+    src/resources
     third_party/nv-codec-headers/include/ffnvcodec
 )
 if(MSVC)
@@ -303,10 +320,11 @@ get_target_property(nexplay_sources nexplay SOURCES)
 list(REMOVE_ITEM nexplay_sources src/gui_main.cpp)
 add_executable(nexplay_ui_preview EXCLUDE_FROM_ALL
     tests/StudioLayoutPreview.cpp ${nexplay_sources})
+add_dependencies(nexplay_ui_preview nexplay_brand)
 target_compile_features(nexplay_ui_preview PRIVATE cxx_std_20)
 target_compile_definitions(nexplay_ui_preview PRIVATE
     UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN WINVER=0x0A00 _WIN32_WINNT=0x0A00)
-target_include_directories(nexplay_ui_preview PRIVATE src third_party/nv-codec-headers/include/ffnvcodec)
+target_include_directories(nexplay_ui_preview PRIVATE src src/resources third_party/nv-codec-headers/include/ffnvcodec)
 if(MSVC)
     target_compile_options(nexplay_ui_preview PRIVATE /W4 /permissive- /utf-8)
 endif()

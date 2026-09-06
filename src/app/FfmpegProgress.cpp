@@ -1,5 +1,6 @@
 #include "FfmpegProgress.h"
 #include "SaveProgress.h"
+#include "platform/windows/MediaTools.h"
 #include <array>
 #include <cstddef>
 #include <memory>
@@ -34,12 +35,9 @@ struct Attributes {
 } // namespace
 DWORD runFfmpegProgress(const std::vector<std::wstring> &arguments, double durationSeconds,
                         const std::function<void(int)> &progress) {
-    std::wstring command;
-    for (const auto &argument : arguments) {
-        if (!command.empty())
-            command += L' ';
-        command += argument;
-    }
+    auto command = platform::prepareMediaCommand(arguments);
+    if (!command)
+        throw std::runtime_error("Brakuje FFmpeg. Zainstaluj ponownie pełną paczkę NexPlay.");
     SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
     Handle reader, writer, input;
     if (!CreatePipe(&reader.value, &writer.value, &security, 0) ||
@@ -71,7 +69,7 @@ DWORD runFfmpegProgress(const std::vector<std::wstring> &arguments, double durat
     startup.StartupInfo.hStdError = writer.value;
     startup.lpAttributeList = list;
     PROCESS_INFORMATION process{};
-    if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, TRUE,
+    if (!CreateProcessW(command->executable.c_str(), command->line.data(), nullptr, nullptr, TRUE,
                         CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr,
                         &startup.StartupInfo, &process))
         throw std::runtime_error("Nie można uruchomić programu FFmpeg.");
