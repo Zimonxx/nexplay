@@ -4,46 +4,81 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag (vX.Y.Z)
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
   release:
-    runs-on: windows-latest
-    timeout-minutes: 25
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Verify release version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          $version = [regex]::Match((Get-Content CMakeLists.txt -Raw), 'project\(NexPlay VERSION ([0-9.]+)').Groups[1].Value
+          if ($env:RELEASE_TAG -ne "v$version") { throw 'Tag must match the CMake project version' }
+
+      - name: Build pinned LGPL media tools
+        run: ./release/Build-FFmpeg.ps1 -Jobs 4
 
       - name: Configure Release
-        run: cmake --preset windows-x64-release
+        run: cmake --preset windows-x64-release "-DNEXPLAY_TEST_FFMPEG:FILEPATH=$pwd/out/dependencies/ffmpeg/bin/ffmpeg.exe"
 
       - name: Build Release
-        run: cmake --build --preset windows-x64-release
+        run: cmake --build --preset windows-x64-release --parallel 4
 
       - name: Run tests
         run: ctest --test-dir out/build/windows-x64-release -C Release --output-on-failure
 
-      - name: Create distribution archive
-        shell: pwsh
+      - name: Validate UI and frame-accurate thumbnails
         run: |
-          New-Item -ItemType Directory -Force -Path dist/NexPlay | Out-Null
-          Copy-Item out/build/windows-x64-release/Release/nexplay.exe dist/NexPlay/
-          Copy-Item README.md dist/NexPlay/
-          Copy-Item release/README.txt dist/NexPlay/
-          Compress-Archive -Path dist/NexPlay -DestinationPath "dist/NexPlay-${{ github.ref_name }}-windows-x64.zip"
+          cmake --build --preset windows-x64-release --target nexplay_ui_preview --parallel 4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:PATH = "$pwd/out/dependencies/ffmpeg/bin;$env:PATH"
+          ./out/build/windows-x64-release/Release/nexplay_ui_preview.exe ./out/release-ui-preview ./out/build/windows-x64-release/audio-identity-fixtures/ordinary.mp4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Package and test install, upgrade and uninstall
+        run: ./release/Build-Package.ps1 -TestInstaller
+
+      - name: Retain verified release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexPlay-release
+          path: |
+            out/dist/NexPlay-*-Setup-windows-x64.exe
+            out/dist/NexPlay-*-windows-x64.zip
+            out/dist/NexPlay-*-FFmpeg-source.zip
+            out/dist/SHA256SUMS.txt
+          if-no-files-found: error
 
       - name: Publish GitHub Release
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          gh release create "${{ github.ref_name }}" `
-            "dist/NexPlay-${{ github.ref_name }}-windows-x64.zip" `
-            --title "NexPlay ${{ github.ref_name }}" `
-            --generate-notes `
-            --verify-tag
+          $assets = Get-ChildItem out/dist -File | Where-Object { $_.Name -match '^NexPlay-[0-9].*\.(exe|zip)$|^SHA256SUMS.txt$' }
+          gh release create $env:RELEASE_TAG $assets.FullName --title "NexPlay $env:RELEASE_TAG" --notes-file release/RELEASE-NOTES.md --verify-tag
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }

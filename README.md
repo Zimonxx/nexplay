@@ -1,5 +1,7 @@
 # NexPlay
 
+<img src="assets/nexplay.svg" width="88" alt="Ikona NexPlay" />
+
 [![Build](https://github.com/Zimonxx/nexplay/actions/workflows/windows-ci.yml/badge.svg)](https://github.com/Zimonxx/nexplay/actions/workflows/windows-ci.yml)
 [![Release](https://github.com/Zimonxx/nexplay/actions/workflows/release.yml/badge.svg)](https://github.com/Zimonxx/nexplay/actions/workflows/release.yml)
 
@@ -37,19 +39,24 @@ NexPlay to lekka nagrywarka powtórek dla Windows, korzystająca ze sprzętowego
 
 - Windows 11 x64,
 - karta NVIDIA obsługująca NVENC i aktualny sterownik NVIDIA,
-- `ffmpeg.exe` oraz `ffprobe.exe` dostępne w zmiennej środowiskowej `PATH`,
+- FFmpeg jest dołączony do instalatora i ZIP-a; osobna instalacja nie jest potrzebna,
 - mikrofon i urządzenia audio widoczne w ustawieniach dźwięku Windows.
 
 NexPlay korzysta z NVENC do kodowania obrazu. Zakres obsługiwanych rozdzielczości, liczby klatek i bitrate'u zależy od możliwości konkretnej karty graficznej, sterownika i monitora.
+Nagrywanie na kartach AMD i Intel nie jest obsługiwane. Windows w edycji N wymaga składników multimedialnych Media Feature Pack.
 
 ## Instalacja i uruchomienie
 
-1. Pobierz najnowsze archiwum z sekcji [Releases](https://github.com/Zimonxx/nexplay/releases).
-2. Rozpakuj je do wybranego katalogu.
-3. Upewnij się, że FFmpeg i FFprobe są zainstalowane i dostępne w `PATH`.
+1. Pobierz **Setup-windows-x64.exe** z sekcji [Releases](https://github.com/Zimonxx/nexplay/releases/latest).
+2. Uruchom instalator. Program instaluje się dla bieżącego użytkownika, bez wymagania praw administratora; skrót na pulpicie jest opcjonalny.
+3. Alternatywnie pobierz **windows-x64.zip** i rozpakuj całość. Katalog `tools` musi pozostać obok `nexplay.exe`.
 4. Uruchom `nexplay.exe`.
 5. Ustaw długość bufora, FPS i bitrate oraz wybierz źródła audio.
 6. Kliknij **Uruchom bufor**.
+
+Wydanie 0.2.0 nie jest podpisane certyfikatem wydawcy, więc Windows może wyświetlić ostrzeżenie. Nie wyłączaj ochrony systemu. Pobieraj program z oficjalnego repozytorium; sumę pliku można porównać z `SHA256SUMS.txt` za pomocą `Get-FileHash -Algorithm SHA256 <plik>`.
+
+Zamknięcie okna chowa NexPlay do zasobnika. Przed aktualizacją lub odinstalowaniem poczekaj na zapis klipów i wybierz **Zakończ** w menu ikony. Aktualizacja zachowuje ustawienia, a odinstalowanie pozostawia nagrania i ustawienia użytkownika. Autostart i automatyczny bufor włącza się osobno w aplikacji — instalator nie włącza nagrywania sam.
 
 Domyślne skróty globalne:
 
@@ -93,6 +100,7 @@ Do zbudowania projektu potrzebne są:
 - CMake 3.24 lub nowszy,
 - Ninja albo generator Visual Studio,
 - Git z obsługą submodułów.
+- PowerShell 7 (lub Windows PowerShell do samego wygenerowania ikony).
 
 Pobierz repozytorium razem z submodułami:
 
@@ -126,6 +134,8 @@ Gotowy program znajduje się w:
 out\build\windows-x64-release\Release\nexplay.exe
 ```
 
+Własny build korzysta z FFmpeg i FFprobe w `PATH` albo z katalogu `tools/ffmpeg/bin` obok programu. Oficjalne paczki zawierają oba narzędzia. Kodowanie używa sterownika NVIDIA zainstalowanego w systemie; nie jest on dołączany do paczki.
+
 Konfiguracja Debug:
 
 ```powershell
@@ -154,11 +164,30 @@ do domyślnego zestawu testów, ponieważ pokazuje okna na pulpicie.
 
 ## Wydania
 
-Tag w formacie `vX.Y.Z` uruchamia automatyczne budowanie paczki i publikację wydania na GitHubie:
+### Budowanie instalatora i ZIP-a
+
+Po zbudowaniu aplikacji uruchom w PowerShell 7:
+
+```powershell
+./release/Build-FFmpeg.ps1
+./release/Build-Package.ps1 -TestInstaller
+```
+
+Pierwszy skrypt buduje ograniczony do potrzeb NexPlay wariant FFmpeg 9.0.1 z oficjalnych źródeł, bez GPL/nonfree i z bibliotekami współdzielonymi LGPL. Pobiera przypięte wersje narzędzi i sprawdza SHA256. Drugi instaluje kompilator Inno Setup 6.7.3 w `out/tools` (dla bieżącego użytkownika), tworzy instalator, ZIP, paczkę źródeł FFmpeg i sumy kontrolne w `out/dist`. Narzędzia do budowania nie trafiają do paczki aplikacji.
+
+`-TestInstaller` dodatkowo testuje instalację, aktualizację i odinstalowanie na osobnym identyfikatorze produktu, katalogu i kluczach testowych. Nie zmienia autostartu NexPlay ani nagrań. Program obsługuje też `nexplay.exe --verify-installation`: sprawdza ikonę i dołączone narzędzia bez okna, nagrywania i dostępu do mikrofonu; kod wyjścia 0 oznacza powodzenie.
+
+### Publikacja
+
+Tag w formacie `vX.Y.Z`, zgodny z wersją w `CMakeLists.txt`, uruchamia budowanie i testy, a następnie publikuje instalator, ZIP, odpowiadające źródła FFmpeg i SHA256 na GitHubie:
 
 ```powershell
 git tag v0.2.0
 git push origin v0.2.0
 ```
 
-Przepływ wydania można również uruchomić ręcznie w zakładce **Actions**.
+Przepływ można ponowić w **Actions**, podając istniejący tag. Istniejące publiczne wydanie nie jest automatycznie nadpisywane. Zwykły CI udostępnia sam plik EXE jako artefakt deweloperski; pełna paczka użytkowa znajduje się w Releases.
+
+## Licencja
+
+Kod i oryginalna grafika NexPlay są dostępne na licencji [MIT](LICENSE). Zależności zachowują swoje licencje: [informacje o komponentach](release/THIRD-PARTY-NOTICES.txt). FFmpeg jest uruchamiany jako osobny proces; jego dokładne źródła, nagłówki NVIDIA i instrukcja kompilacji znajdują się obok binarnych paczek każdego wydania.

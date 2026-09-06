@@ -1,20 +1,30 @@
-NexPlay for Windows x64
+NexPlay — Replay Studio
 ======================
 
-Uruchom nexplay.exe. Program działa w zasobniku systemowym po zamknięciu
-głównego okna.
+Wymagania: Windows 11 x64, karta NVIDIA z NVENC i aktualny sterownik NVIDIA.
+AMD i Intel nie są obecnie obsługiwane do nagrywania. Maksymalna rozdzielczość,
+FPS i bitrate zależą od sprzętu. FFmpeg jest dołączony; nie trzeba ustawiać PATH.
 
-Wymagania:
-- Windows 11 x64
-- karta NVIDIA obsługująca NVENC i aktualny sterownik NVIDIA
-- ffmpeg.exe oraz ffprobe.exe dostępne w zmiennej PATH
+Instalator instaluje program dla bieżącego użytkownika, bez wymagania praw
+administratora. Skrót na pulpicie jest opcjonalny. Wersję ZIP rozpakuj w całości,
+zachowując katalog tools obok nexplay.exe. Nie uruchamiaj programu wewnątrz ZIP.
 
-Domyślne skróty:
-- F8: zapisz klip i wyzeruj bufor
-- F9: zatrzymaj bufor
+Uruchom NexPlay, wybierz parametry i źródła dźwięku, kliknij Uruchom bufor.
+F8 zapisuje klip i zeruje bufor; F9 zatrzymuje bufor. Skróty możesz zmienić
+lub wyłączyć. Biblioteka pozwala przeglądać, przycinać i eksportować klipy.
+Zamknięcie okna chowa program do trayu. Aby wyjść, wybierz Zakończ w menu ikony.
+Przed aktualizacją lub odinstalowaniem zakończ program i poczekaj na zapis klipów.
 
-Skróty można zmienić w ustawieniach NexPlay. Są nasłuchiwane pasywnie, więc
-nie blokują ich działania w aktywnej grze lub aplikacji.
+Autostart i automatyczny bufor włącza się osobno w ustawieniach aplikacji.
+Instalator nie włącza ich sam. Aktualizacja zachowuje dotychczasowy wybór.
+Odinstalowanie nie usuwa nagrań ani ustawień użytkownika.
 
-Kod źródłowy i nowe wersje:
-https://github.com/Zimonxx/nexplay
+Nagrania: %USERPROFILE%\Videos\NexPlay\Clips
+Bufor: %TEMP%\NexPlay\ReplayBuffer
+
+To wydanie nie ma podpisu cyfrowego wydawcy. Windows może wyświetlić ostrzeżenie.
+Pobieraj wyłącznie z oficjalnych Releases; sumy SHA256 są dostępne obok paczek.
+Nie wyłączaj ochrony systemu. Szczegółowa instrukcja: README.md.
+
+Licencja NexPlay: MIT. Zależności: THIRD-PARTY-NOTICES.txt i katalog licenses.
+Kod źródłowy, wydania i zgłoszenia: https://github.com/Zimonxx/nexplay

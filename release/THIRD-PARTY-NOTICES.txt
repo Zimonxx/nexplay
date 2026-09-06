@@ -1,0 +1,55 @@
+NexPlay third-party notices
+==========================
+
+The NexPlay application and its original artwork are MIT licensed (see LICENSE).
+The following components retain their own licenses. The MIT license for NexPlay
+does not replace their terms.
+
+FFmpeg 9.0.1
+-----------
+Copyright (c) the FFmpeg developers. https://ffmpeg.org/
+The distribution contains ffmpeg.exe, ffprobe.exe and shared FFmpeg libraries.
+They are separate programs, not linked into nexplay.exe. This custom build uses
+LGPL 2.1 or later, with GPL and nonfree components disabled. No external codec
+libraries are included. NVIDIA headers are MIT licensed; the NVIDIA driver must
+be installed separately by the user and is not part of this package.
+
+See licenses/FFmpeg-LGPL-2.1.txt and licenses/FFmpeg-BUILD-CONFIG.txt.
+The exact corresponding source, headers and build scripts are provided as the
+NexPlay-<version>-FFmpeg-source.zip asset alongside every binary release:
+https://github.com/Zimonxx/nexplay/releases
+The archive contains the original ffmpeg-9.0.1.tar.xz, nv-codec-headers snapshot,
+build configuration and instructions. No changes are made to FFmpeg source.
+You may replace the FFmpeg tools/libraries with compatible builds and modify
+them under their licenses. Reverse engineering to debug modifications to LGPL
+components is permitted. FFmpeg is provided without warranty.
+
+NVIDIA Video Codec SDK headers / nv-codec-headers
+------------------------------------------------
+Copyright (c) 2010-2026 NVIDIA Corporation
+https://github.com/FFmpeg/nv-codec-headers
+
+Windows classic samples / ApplicationLoopback
+---------------------------------------------
+Copyright (c) Microsoft Corporation
+https://github.com/microsoft/Windows-classic-samples
+
+MIT terms for the NVIDIA and Microsoft components above:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
