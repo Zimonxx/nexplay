@@ -1,6 +1,7 @@
 #include "app/RecorderEngine.h"
 #include "audio/AudioSessionScanner.h"
 #include "playback/PreviewAudio.h"
+#include "playback/ThumbnailSelection.h"
 
 #include <Windows.h>
 #include <windowsx.h>
@@ -272,6 +273,7 @@ struct ClipPreview final {
     double duration{};
     double framesPerSecond{};
     std::map<int, std::vector<std::uint8_t>> frames;
+    int lastScrubFrame{-1};
 };
 
 struct ClipRow final {
@@ -983,12 +985,14 @@ void removeLegacyThumbnailCache() noexcept {
             frameIndex - framesBeforeCursor, 0, totalFrames - 1);
         const int frameCount = std::min(
             previewWindowSize, totalFrames - result.firstFrameIndex);
-        const double timestamp = std::clamp(
-            (static_cast<double>(result.firstFrameIndex) + 0.5) / framesPerSecond,
-            0.0, std::max(0.0, duration - 0.5 / framesPerSecond));
+        // Seek just before the frame boundary, not halfway through the frame:
+        // accurate seeking discards frames before -ss, causing a one-frame offset.
+        const double timestamp = std::max(0.0, result.firstFrameIndex / framesPerSecond - 0.000001);
+        wchar_t seekTimestamp[48]{};
+        swprintf_s(seekTimestamp, L"%.9f", timestamp);
         const std::vector<std::wstring> arguments{
             L"ffmpeg.exe", L"-hide_banner", L"-loglevel", L"quiet",
-            L"-ss", secondsArgument(timestamp), L"-i", quoteProcessArgument(clip.wstring()),
+            L"-ss", seekTimestamp, L"-i", quoteProcessArgument(clip.wstring()),
             L"-frames:v", std::to_wstring(frameCount), L"-an", L"-vf", scaleFilter,
             L"-q:v", L"3", L"-f", L"image2pipe", L"-vcodec", L"mjpeg", L"pipe:1",
         };
@@ -1900,11 +1904,12 @@ void drawClipsPage(AppState &state) {
             requestThumbnail(state.mainWindow, state, clip.path, requested);
         ID2D1Bitmap *bitmap = nullptr;
         if (clip.preview && !clip.preview->frames.empty()) {
-            auto frame = clip.preview->frames.find(requested);
-            if (frame == clip.preview->frames.end())
-                frame = clip.preview->frames.begin();
+            const int selected = nexplay::playback::thumbnailFrame(
+                clip.preview->frames, requested, hover ? clip.preview->lastScrubFrame : -1);
+            const auto frame = clip.preview->frames.find(selected);
             bitmap = thumbnailBitmap(
                 state, clip.path.wstring() + L"#" + std::to_wstring(frame->first), frame->second);
+            if (hover && bitmap != nullptr) clip.preview->lastScrubFrame = selected;
         }
         panel(state, r);
         fillRounded(state, thumb, 8, {0.015F, 0.017F, 0.021F, 1});

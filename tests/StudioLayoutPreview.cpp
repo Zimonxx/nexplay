@@ -39,6 +39,59 @@ void check(HRESULT result) {
     if (FAILED(result))
         throw std::runtime_error("UI preview render failed");
 }
+std::vector<BYTE> decodedPixels(IWICImagingFactory *factory,
+                                const std::vector<std::uint8_t> &encoded) {
+    ComPtr<IWICStream> stream;
+    ComPtr<IWICBitmapDecoder> decoder;
+    ComPtr<IWICBitmapFrameDecode> frame;
+    ComPtr<IWICFormatConverter> converter;
+    check(factory->CreateStream(&stream));
+    check(stream->InitializeFromMemory(const_cast<BYTE *>(encoded.data()),
+                                       static_cast<DWORD>(encoded.size())));
+    check(factory->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnLoad,
+                                           &decoder));
+    check(decoder->GetFrame(0, &frame));
+    check(factory->CreateFormatConverter(&converter));
+    check(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone,
+                                nullptr, 0, WICBitmapPaletteTypeCustom));
+    UINT width{}, height{};
+    check(converter->GetSize(&width, &height));
+    std::vector<BYTE> pixels(width * height * 4);
+    check(
+        converter->CopyPixels(nullptr, width * 4, static_cast<UINT>(pixels.size()), pixels.data()));
+    return pixels;
+}
+void validateFrameDecoder(const std::filesystem::path &clip) {
+    ComPtr<IWICImagingFactory> factory;
+    check(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                           IID_PPV_ARGS(&factory)));
+    const auto metadata = generateThumbnail(clip, 0, 0, 0);
+    if (metadata.duration <= 0 || metadata.framesPerSecond <= 0)
+        throw std::runtime_error("No fixture metadata");
+    const int last = static_cast<int>(metadata.duration * metadata.framesPerSecond) - 1;
+    for (int requested : {0, 1, 29, 60, last - 1, last}) {
+        const auto actual =
+            generateThumbnail(clip, requested, metadata.duration, metadata.framesPerSecond);
+        const int offset = requested - actual.firstFrameIndex;
+        if (offset < 0 || offset >= static_cast<int>(actual.frames.size()))
+            throw std::runtime_error("Requested preview frame was not decoded");
+        // Full linear decoding with an explicit frame index is the independent reference.
+        const auto reference = splitMjpegFrames(runHiddenProcessCapture(
+            {L"ffmpeg.exe", L"-hide_banner", L"-loglevel", L"quiet", L"-i",
+             quoteProcessArgument(clip.wstring()), L"-vf",
+             quoteProcessArgument(L"select=eq(n\\," + std::to_wstring(requested) +
+                                  L"),"
+                                  L"scale=352:198:force_original_aspect_ratio=decrease:force_"
+                                  L"divisible_by=2,pad=352:198:(ow-iw)/2:(oh-ih)/2"),
+             L"-frames:v", L"1", L"-an", L"-q:v", L"3", L"-f", L"image2pipe", L"-vcodec", L"mjpeg",
+             L"pipe:1"}));
+        if (reference.empty() || decodedPixels(factory.Get(), actual.frames[offset]) !=
+                                     decodedPixels(factory.Get(), reference.front()))
+            throw std::runtime_error("Preview frame differs from linear decode: " +
+                                     std::to_string(requested));
+    }
+    std::cout << "Fast-seek preview frames match linear decoding, including the last frame.\n";
+}
 void savePng(AppState &state, IWICBitmap *bitmap, const std::filesystem::path &path) {
     ComPtr<IWICStream> stream;
     ComPtr<IWICBitmapEncoder> encoder;
@@ -132,12 +185,14 @@ void validateHitTargets(AppState &state) {
 }
 } // namespace
 int wmain(int argc, wchar_t **argv) {
-    if (argc != 2)
+    if (argc != 2 && argc != 3)
         return 2;
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)))
         return 3;
     int result = 0;
     try {
+        if (argc == 3)
+            validateFrameDecoder(argv[2]);
         const std::filesystem::path folder = argv[1];
         std::filesystem::create_directories(folder);
         for (float width : {1080.0F, 1240.0F, 1920.0F, 2560.0F}) {

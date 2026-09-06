@@ -110,6 +110,14 @@ target_link_libraries(nexplay_replay_test PRIVATE
 
 enable_testing()
 
+add_executable(thumbnail_selection_tests tests/ThumbnailSelectionTests.cpp)
+target_compile_features(thumbnail_selection_tests PRIVATE cxx_std_20)
+target_include_directories(thumbnail_selection_tests PRIVATE src)
+if(MSVC)
+    target_compile_options(thumbnail_selection_tests PRIVATE /W4 /permissive- /utf-8)
+endif()
+add_test(NAME thumbnail_selection COMMAND thumbnail_selection_tests)
+
 add_executable(preview_audio_tests tests/PreviewAudioTests.cpp src/playback/PreviewAudio.cpp)
 target_compile_features(preview_audio_tests PRIVATE cxx_std_20)
 target_compile_definitions(preview_audio_tests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
