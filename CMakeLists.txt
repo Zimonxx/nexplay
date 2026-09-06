@@ -118,15 +118,26 @@ if(MSVC)
 endif()
 add_test(NAME thumbnail_selection COMMAND thumbnail_selection_tests)
 
-add_executable(preview_audio_tests tests/PreviewAudioTests.cpp src/playback/PreviewAudio.cpp)
+add_executable(preview_audio_tests tests/PreviewAudioTests.cpp src/playback/PreviewAudio.cpp src/playback/Mp4AudioSource.cpp)
 target_compile_features(preview_audio_tests PRIVATE cxx_std_20)
 target_compile_definitions(preview_audio_tests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_include_directories(preview_audio_tests PRIVATE src)
-target_link_libraries(preview_audio_tests PRIVATE mf mfplay mfplat mfuuid ole32)
+target_link_libraries(preview_audio_tests PRIVATE mf mfplay mfplat mfreadwrite mfuuid ole32)
 if(MSVC)
     target_compile_options(preview_audio_tests PRIVATE /W4 /permissive- /utf-8)
 endif()
 add_test(NAME preview_audio_policy COMMAND preview_audio_tests)
+
+# Content-level regression: works headlessly, without speakers or a capture device.
+find_program(NEXPLAY_TEST_FFMPEG NAMES ffmpeg)
+if(NEXPLAY_TEST_FFMPEG)
+    add_test(NAME preview_audio_identity COMMAND ${CMAKE_COMMAND}
+        "-DFFMPEG=${NEXPLAY_TEST_FFMPEG}"
+        "-DTEST_EXE=$<TARGET_FILE:preview_audio_tests>"
+        "-DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/audio-identity-fixtures"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/PreviewAudioIntegration.cmake)
+    set_tests_properties(preview_audio_identity PROPERTIES TIMEOUT 60)
+endif()
 
 add_executable(replay_segment_buffer_tests
     tests/ReplaySegmentBufferTests.cpp
@@ -228,6 +239,7 @@ target_link_libraries(nexplay_av_replay_test PRIVATE
 add_executable(nexplay WIN32
     src/gui_main.cpp
     src/playback/PreviewAudio.cpp
+    src/playback/Mp4AudioSource.cpp
     src/app/RecorderEngine.cpp
     src/audio/AudioSessionScanner.cpp
     src/audio/PcmAudioCapture.cpp

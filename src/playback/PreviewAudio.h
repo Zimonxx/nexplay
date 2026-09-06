@@ -4,6 +4,7 @@
 #include <mfplay.h>
 #include <wrl/client.h>
 #include <filesystem>
+#include <cstdint>
 #include <vector>
 
 namespace nexplay::playback {
@@ -12,6 +13,7 @@ struct AudioSelection {
     bool included{true};
     double start{};
     double end{};
+    std::uint32_t trackId{}; // Stable MP4 tkhd.track_ID, as reported by ffprobe stream.id.
 };
 
 [[nodiscard]] inline bool audible(const AudioSelection &track, double seconds) noexcept {
@@ -36,6 +38,7 @@ class PreviewAudio final {
     struct TrackPlayer {
         Microsoft::WRL::ComPtr<IMFPMediaPlayer> player;
         bool muted{true};
+        std::uint32_t trackId{};
     };
     std::vector<TrackPlayer> players_;
     bool playing_{};

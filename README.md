@@ -110,6 +110,11 @@ cmake --build --preset windows-x64-release
 ctest --test-dir out/build/windows-x64-release -C Release --output-on-failure
 ```
 
+Jeśli FFmpeg jest dostępny w `PATH` podczas konfiguracji, testy sprawdzają również
+rzeczywistą zawartość ścieżek audio na syntetycznych MP4: odwróconą kolejność,
+identyczne nazwy, różne identyfikatory i przewijanie. Nie wymagają głośników,
+nie odtwarzają dźwięku i nie korzystają z nagrań użytkownika.
+
 Gotowy program znajduje się w:
 
 ```text

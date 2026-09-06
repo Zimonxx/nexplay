@@ -276,6 +276,7 @@ struct EditorAudioTrack final {
     bool included{true};
     double start{};
     double end{};
+    std::uint32_t trackId{};
 };
 
 struct ClipPreview final {
@@ -866,7 +867,7 @@ void savePersistentRecordingSettings(const AppState& state) {
     const std::filesystem::path& clip) {
     const std::string output = runHiddenProcessCapture({
         L"ffprobe.exe", L"-v", L"error", L"-select_streams", L"a",
-        L"-show_entries", L"stream=index:stream_tags=handler_name,title",
+        L"-show_entries", L"stream=index,id:stream_tags=handler_name,title",
         L"-of", L"default=noprint_wrappers=0:nokey=0",
         quoteProcessArgument(clip.wstring()),
     });
@@ -874,24 +875,30 @@ void savePersistentRecordingSettings(const AppState& state) {
     std::istringstream lines(output);
     std::string line;
     int streamIndex = -1;
+    std::uint32_t trackId{};
     std::wstring name;
     const auto finishTrack = [&] {
         if (streamIndex < 0) return;
         if (name.empty()) name = L"Ścieżka audio " + std::to_wstring(tracks.size() + 1);
-        tracks.push_back({.streamIndex = streamIndex, .name = std::move(name)});
+        tracks.push_back({.streamIndex = streamIndex, .name = std::move(name), .trackId = trackId});
         streamIndex = -1;
+        trackId = 0;
         name.clear();
     };
     while (std::getline(lines, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line == "[STREAM]") {
             streamIndex = -1;
+            trackId = 0;
             name.clear();
         } else if (line == "[/STREAM]") {
             finishTrack();
         } else if (line.starts_with("index=")) {
             try { streamIndex = std::stoi(line.substr(6)); }
             catch (...) { streamIndex = -1; }
+        } else if (line.starts_with("id=")) {
+            try { trackId = std::stoul(line.substr(3), nullptr, 0); }
+            catch (...) { trackId = 0; }
         } else if (line.starts_with("TAG:handler_name=")) {
             name = utf8ToWide(line.substr(17));
         } else if (name.empty() && line.starts_with("TAG:title=")) {
@@ -2595,7 +2602,8 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
     state.mediaPlayer->SetMute(TRUE);
     try {
         std::vector<nexplay::playback::AudioSelection> tracks;
-        tracks.resize(state.editorAudioTracks.size());
+        for (const auto& track : state.editorAudioTracks)
+            tracks.push_back({track.included, track.start, track.end, track.trackId});
         state.previewAudio.open(clip, tracks);
     } catch (...) {
         setStatus(window, state, L"Błąd: nie można przygotować odsłuchu ścieżek; podgląd pozostaje wyciszony");
@@ -2611,7 +2619,7 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
 void updatePreviewAudio(AppState& state) {
     std::vector<nexplay::playback::AudioSelection> tracks;
     for (const auto& track : state.editorAudioTracks) {
-        tracks.push_back({track.included, track.start, track.end});
+        tracks.push_back({track.included, track.start, track.end, track.trackId});
     }
     state.previewAudio.update(tracks, state.playPosition, state.playing);
 }

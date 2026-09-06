@@ -1,8 +1,10 @@
 #include "PreviewAudio.h"
+#include "Mp4AudioSource.h"
 #include <mfapi.h>
 #include <mfidl.h>
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <stdexcept>
 
 namespace nexplay::playback {
@@ -26,16 +28,14 @@ void PreviewAudio::open(const std::filesystem::path &file,
                         const std::vector<AudioSelection> &tracks) {
     close();
     try {
-        for (std::size_t ordinal = 0; ordinal < tracks.size(); ++ordinal) {
-            ComPtr<IMFSourceResolver> resolver;
-            ComPtr<IUnknown> object;
-            ComPtr<IMFMediaSource> source;
+        std::set<std::uint32_t> ids;
+        for (const auto &track : tracks) {
+            if (track.trackId == 0 || !ids.insert(track.trackId).second)
+                throw std::runtime_error("Missing or duplicate preview audio identity");
+        }
+        for (const auto &track : tracks) {
+            auto source = audioTrackSource(file, track.trackId);
             ComPtr<IMFPresentationDescriptor> descriptor;
-            MF_OBJECT_TYPE type{};
-            check(MFCreateSourceResolver(&resolver));
-            check(resolver->CreateObjectFromURL(file.c_str(), MF_RESOLUTION_MEDIASOURCE, nullptr,
-                                                &type, &object));
-            check(object.As(&source));
             check(source->CreatePresentationDescriptor(&descriptor));
 
             ComPtr<IMFPMediaPlayer> player;
@@ -45,7 +45,6 @@ void PreviewAudio::open(const std::filesystem::path &file,
             check(player->CreateMediaItemFromObject(source.Get(), TRUE, 0, &item));
             DWORD count{};
             check(item->GetNumberOfStreams(&count));
-            DWORD audioOrdinal = 0;
             bool matched = false;
             for (DWORD i = 0; i < count; ++i) {
                 BOOL selected{};
@@ -56,18 +55,14 @@ void PreviewAudio::open(const std::filesystem::path &file,
                 check(stream->GetMediaTypeHandler(&handler));
                 check(handler->GetMajorType(&major));
                 const bool audio = major == MFMediaType_Audio;
-                // Both the editor and this source enumerate audio in file order.
-                // MF assigns its own stream IDs; they are NOT the MP4 track IDs.
-                const bool wanted = audio && audioOrdinal == ordinal;
+                const bool wanted = audio;
                 check(item->SetStreamSelection(i, wanted));
                 matched = matched || wanted;
-                if (audio)
-                    ++audioOrdinal;
             }
-            if (!matched)
+            if (!matched || count != 1)
                 throw std::runtime_error("Preview audio stream was not found");
             check(player->SetMediaItem(item.Get()));
-            players_.push_back({std::move(player), true});
+            players_.push_back({std::move(player), true, track.trackId});
         }
     } catch (...) {
         close();
@@ -99,13 +94,27 @@ void PreviewAudio::seek(double seconds) noexcept {
 
 void PreviewAudio::update(const std::vector<AudioSelection> &tracks, double seconds,
                           bool playing) noexcept {
-    if (tracks.size() != players_.size()) {
+    // Edits are keyed by the same identity as decoding, never by list position.
+    const bool valid =
+        tracks.size() == players_.size() &&
+        std::all_of(players_.begin(), players_.end(), [&](const TrackPlayer &player) {
+            return std::count_if(tracks.begin(), tracks.end(), [&](const AudioSelection &edit) {
+                       return edit.trackId == player.trackId;
+                   }) == 1;
+        });
+    if (!valid) {
+        for (auto &track : players_) {
+            if (SUCCEEDED(track.player->SetMute(TRUE)))
+                track.muted = true;
+        }
         pause();
         return;
     }
-    for (std::size_t i = 0; i < players_.size(); ++i) {
-        auto &track = players_[i];
-        const bool mute = !audible(tracks[i], seconds);
+    for (auto &track : players_) {
+        const auto edit =
+            std::find_if(tracks.begin(), tracks.end(),
+                         [&](const AudioSelection &item) { return item.trackId == track.trackId; });
+        const bool mute = !audible(*edit, seconds);
         if (track.muted != mute && SUCCEEDED(track.player->SetMute(mute)))
             track.muted = mute;
     }
