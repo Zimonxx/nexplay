@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Windows.h>
+#include "SaveProgress.h"
 
 #include <atomic>
 #include <chrono>
@@ -10,6 +11,8 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <deque>
+#include <mutex>
 
 namespace nexplay::app {
 
@@ -34,18 +37,23 @@ public:
     RecorderEngine(const RecorderEngine&) = delete;
     RecorderEngine& operator=(const RecorderEngine&) = delete;
 
-    void start(RecorderSettings settings, StatusCallback statusCallback);
-    void requestSave() noexcept;
+    void start(RecorderSettings settings, StatusCallback statusCallback,
+               SaveCallback saveCallback = {});
+    SaveId requestSave();
+    void requestStop() noexcept;
     void stop() noexcept;
 
     [[nodiscard]] bool isRunning() const noexcept;
 
 private:
-    void run(std::stop_token stopToken, RecorderSettings settings, StatusCallback statusCallback);
+    void run(std::stop_token stopToken, RecorderSettings settings, StatusCallback statusCallback,
+             SaveCallback saveCallback);
 
     std::jthread worker_;
     std::atomic_bool running_{};
-    std::atomic_bool saveRequested_{};
+    std::mutex saveMutex_;
+    std::deque<SaveId> pendingSaves_;
+    SaveId nextSaveId_{1};
 };
 
 } // namespace nexplay::app

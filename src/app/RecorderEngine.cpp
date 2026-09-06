@@ -1,4 +1,5 @@
 #include "app/RecorderEngine.h"
+#include "app/FfmpegProgress.h"
 
 #include "audio/AudioSessionScanner.h"
 #include "audio/PcmAudioCapture.h"
@@ -127,9 +128,9 @@ struct MuxedAudioTrack final {
     return result;
 }
 
-void concatenateFiles(
-    const std::vector<std::filesystem::path>& sources,
-    const std::filesystem::path& destination) {
+void concatenateFiles(const std::vector<std::filesystem::path>& sources,
+                      const std::filesystem::path& destination,
+                      const std::function<void(std::uintmax_t)>& copied) {
     std::ofstream combined(destination, std::ios::binary | std::ios::trunc);
     if (!combined) {
         throw std::runtime_error("Nie można utworzyć pliku pośredniego klipu.");
@@ -139,43 +140,23 @@ void concatenateFiles(
         if (!input) {
             throw std::runtime_error("Nie można odczytać segmentu klipu.");
         }
-        combined << input.rdbuf();
+        std::vector<char> chunk(256 * 1024);
+        while (input) {
+            input.read(chunk.data(), static_cast<std::streamsize>(chunk.size()));
+            const auto count = input.gcount();
+            combined.write(chunk.data(), count);
+            if (!combined)
+                throw std::runtime_error("Nie można zapisać danych klipu.");
+            if (copied)
+                copied(static_cast<std::uintmax_t>(count));
+        }
+        if (!input.eof())
+            throw std::runtime_error("Nie można odczytać danych klipu.");
     }
+    combined.close();
     if (!combined) {
         throw std::runtime_error("Nie można połączyć segmentów klipu.");
     }
-}
-
-[[nodiscard]] DWORD runHiddenProcess(const std::vector<std::wstring>& arguments) {
-    std::wstring commandLine;
-    for (const auto& argument : arguments) {
-        if (!commandLine.empty()) {
-            commandLine.push_back(L' ');
-        }
-        commandLine.append(argument);
-    }
-
-    STARTUPINFOW startupInfo{sizeof(startupInfo)};
-    PROCESS_INFORMATION processInfo{};
-    if (!CreateProcessW(
-            nullptr,
-            commandLine.data(),
-            nullptr,
-            nullptr,
-            FALSE,
-            CREATE_NO_WINDOW,
-            nullptr,
-            nullptr,
-            &startupInfo,
-            &processInfo)) {
-        throw std::runtime_error("Nie można uruchomić programu FFmpeg.");
-    }
-    WaitForSingleObject(processInfo.hProcess, INFINITE);
-    DWORD exitCode = ERROR_GEN_FAILURE;
-    GetExitCodeProcess(processInfo.hProcess, &exitCode);
-    CloseHandle(processInfo.hThread);
-    CloseHandle(processInfo.hProcess);
-    return exitCode;
 }
 
 [[nodiscard]] std::wstring decimalSeconds(
@@ -188,21 +169,40 @@ void concatenateFiles(
     return text.str();
 }
 
-void saveStagedReplay(
-    StagedAvReplay staged,
-    const std::filesystem::path destinationDirectory,
-    const std::uint32_t framesPerSecond,
-    const StatusCallback& statusCallback) {
+void saveStagedReplay(StagedAvReplay staged, const std::filesystem::path destinationDirectory,
+                      const std::uint32_t framesPerSecond, const StatusCallback& statusCallback,
+                      const SaveId saveId, const SaveCallback& saveCallback) {
+    const auto report = [&](SavePhase phase, int percent, std::wstring detail = {}) {
+        if (saveCallback)
+            saveCallback({saveId, phase, percent, std::move(detail)});
+    };
     try {
+        std::uintmax_t totalBytes{}, copiedBytes{};
+        for (const auto& file : staged.video.segments)
+            totalBytes += std::filesystem::file_size(file);
+        for (const auto& input : staged.audioInputs)
+            for (const auto& file : input.track.segments)
+                totalBytes += std::filesystem::file_size(file);
+        int lastPercent = -1;
+        const auto copied = [&](std::uintmax_t bytes) {
+            copiedBytes += bytes;
+            const int percent =
+                5 + static_cast<int>(15.0 * copiedBytes / std::max<std::uintmax_t>(1, totalBytes));
+            if (percent != lastPercent) {
+                lastPercent = percent;
+                report(SavePhase::preparing, percent);
+            }
+        };
+        report(SavePhase::preparing, 5);
         const auto rawVideoPath = staged.video.directory / L"combined.h264";
-        concatenateFiles(staged.video.segments, rawVideoPath);
+        concatenateFiles(staged.video.segments, rawVideoPath, copied);
 
         std::vector<std::filesystem::path> rawAudioPaths;
         rawAudioPaths.reserve(staged.audioInputs.size());
         for (std::size_t index = 0; index < staged.audioInputs.size(); ++index) {
             const auto path = staged.video.directory /
                 (L"combined-audio-" + std::to_wstring(index) + L".pcm");
-            concatenateFiles(staged.audioInputs[index].track.segments, path);
+            concatenateFiles(staged.audioInputs[index].track.segments, path, copied);
             rawAudioPaths.push_back(path);
         }
 
@@ -221,8 +221,19 @@ void saveStagedReplay(
         const auto outputPath = destinationDirectory /
             (timestampName() + L"-" + staged.video.directory.filename().wstring() + L".mp4");
         std::vector<std::wstring> arguments{
-            L"ffmpeg.exe", L"-hide_banner", L"-loglevel", L"error", L"-y",
-            L"-r", std::to_wstring(framesPerSecond), L"-i",
+            L"ffmpeg.exe",
+            L"-hide_banner",
+            L"-loglevel",
+            L"error",
+            L"-y",
+            L"-nostats",
+            L"-stats_period",
+            L"0.1",
+            L"-progress",
+            L"pipe:1",
+            L"-r",
+            std::to_wstring(framesPerSecond),
+            L"-i",
             quoteSpawnArgument(rawVideoPath.wstring()),
         };
         for (std::size_t index = 0; index < staged.audioInputs.size(); ++index) {
@@ -271,21 +282,29 @@ void saveStagedReplay(
             L"-movflags", L"+faststart", quoteSpawnArgument(outputPath.wstring()),
         });
 
-        if (runHiddenProcess(arguments) != 0) {
+        report(SavePhase::encoding, 20, outputPath.filename().wstring());
+        if (runFfmpegProgress(arguments,
+                              static_cast<double>(staged.video.frameCount) / framesPerSecond,
+                              [&](int percent) {
+                                  report(SavePhase::encoding, 20 + percent * 79 / 100,
+                                         outputPath.filename().wstring());
+                              }) != 0) {
             throw std::runtime_error("FFmpeg nie utworzył pliku MP4 ze ścieżkami audio.");
         }
-
+        report(SavePhase::finalizing, 99, outputPath.filename().wstring());
+        if (!std::filesystem::exists(outputPath) || std::filesystem::file_size(outputPath) == 0)
+            throw std::runtime_error("Zapisany plik klipu jest pusty.");
         std::error_code error;
         std::filesystem::remove_all(staged.video.directory, error);
+        report(SavePhase::saved, 100, outputPath.filename().wstring());
         if (statusCallback) {
             statusCallback(L"Klip zapisany: " + outputPath.wstring());
         }
-        MessageBeep(MB_OK);
     } catch (const std::exception& error) {
+        report(SavePhase::failed, 0, utf8ToWide(error.what()));
         if (statusCallback) {
             statusCallback(L"Błąd zapisu klipu: " + utf8ToWide(error.what()));
         }
-        MessageBeep(MB_ICONERROR);
     }
 }
 
@@ -373,7 +392,8 @@ RecorderEngine::~RecorderEngine() {
     stop();
 }
 
-void RecorderEngine::start(RecorderSettings settings, StatusCallback statusCallback) {
+void RecorderEngine::start(RecorderSettings settings, StatusCallback statusCallback,
+                           SaveCallback saveCallback) {
     if (running_.exchange(true)) {
         throw std::logic_error("Bufor jest już uruchomiony.");
     }
@@ -386,37 +406,50 @@ void RecorderEngine::start(RecorderSettings settings, StatusCallback statusCallb
     if (worker_.joinable()) {
         worker_.join();
     }
-    saveRequested_ = false;
+    {
+        std::lock_guard lock(saveMutex_);
+        pendingSaves_.clear();
+    }
     worker_ = std::jthread(
-        [this, settings = std::move(settings), statusCallback = std::move(statusCallback)](
-            const std::stop_token stopToken) mutable {
-            run(stopToken, std::move(settings), std::move(statusCallback));
+        [this, settings = std::move(settings), statusCallback = std::move(statusCallback),
+         saveCallback = std::move(saveCallback)](const std::stop_token stopToken) mutable {
+            run(stopToken, std::move(settings), std::move(statusCallback), std::move(saveCallback));
         });
 }
 
-void RecorderEngine::requestSave() noexcept {
-    if (running_) {
-        saveRequested_ = true;
-    }
+SaveId RecorderEngine::requestSave() {
+    std::lock_guard lock(saveMutex_);
+    if (!running_ || worker_.get_stop_token().stop_requested())
+        return 0;
+    const auto id = nextSaveId_++;
+    pendingSaves_.push_back(id);
+    return id;
+}
+
+void RecorderEngine::requestStop() noexcept {
+    if (worker_.joinable())
+        worker_.request_stop();
 }
 
 void RecorderEngine::stop() noexcept {
+    {
+        std::lock_guard lock(saveMutex_);
+        running_ = false;
+    }
     if (worker_.joinable()) {
         worker_.request_stop();
         worker_.join();
     }
     running_ = false;
-    saveRequested_ = false;
 }
 
 bool RecorderEngine::isRunning() const noexcept {
     return running_;
 }
 
-void RecorderEngine::run(
-    const std::stop_token stopToken,
-    RecorderSettings settings,
-    StatusCallback statusCallback) {
+void RecorderEngine::run(const std::stop_token stopToken, RecorderSettings settings,
+                         StatusCallback statusCallback, SaveCallback saveCallback) {
+    SaveId stagingId{};
     try {
         ComApartment apartment;
         storage::ReplayStorage storageRoot;
@@ -454,7 +487,16 @@ void RecorderEngine::run(
         const auto frameDuration =
             std::chrono::nanoseconds(1'000'000'000 / settings.framesPerSecond);
         while (!stopToken.stop_requested()) {
-            if (saveRequested_.exchange(false)) {
+            {
+                std::lock_guard lock(saveMutex_);
+                if (!pendingSaves_.empty()) {
+                    stagingId = pendingSaves_.front();
+                    pendingSaves_.pop_front();
+                }
+            }
+            if (stagingId) {
+                if (saveCallback)
+                    saveCallback({stagingId, SavePhase::preparing, 1, {}});
                 replay.finishSegment(segmentFrames);
                 segmentFrames = 0;
                 stopAudioTracks(audioTracks);
@@ -479,13 +521,14 @@ void RecorderEngine::run(
                     for (auto& track : audioTracks) {
                         track->buffer->reset();
                     }
-                    saveJobs.emplace_back(
-                        saveStagedReplay,
-                        std::move(staged),
-                        clipFolder,
-                        settings.framesPerSecond,
-                        statusCallback);
+                    saveJobs.emplace_back(saveStagedReplay, std::move(staged), clipFolder,
+                                          settings.framesPerSecond, statusCallback, stagingId,
+                                          saveCallback);
+                } else if (saveCallback) {
+                    saveCallback(
+                        {stagingId, SavePhase::failed, 0, L"Bufor nie zawiera jeszcze klatek."});
                 }
+                stagingId = 0;
 
                 audioTracks.clear();
                 audioTracks = startAudioTracks(replay.sessionDirectory(), settings);
@@ -524,12 +567,21 @@ void RecorderEngine::run(
             statusCallback(L"Bufor zatrzymany.");
         }
     } catch (const std::exception& error) {
+        if (stagingId && saveCallback)
+            saveCallback({stagingId, SavePhase::failed, 0, utf8ToWide(error.what())});
         if (statusCallback) {
             statusCallback(L"Błąd: " + utf8ToWide(error.what()));
         }
-        MessageBeep(MB_ICONERROR);
     }
-    running_ = false;
+    std::deque<SaveId> cancelled;
+    {
+        std::lock_guard lock(saveMutex_);
+        running_ = false;
+        cancelled.swap(pendingSaves_);
+    }
+    if (saveCallback)
+        for (const auto id : cancelled)
+            saveCallback({id, SavePhase::failed, 0, L"Bufor został zatrzymany przed zapisem."});
 }
 
 } // namespace nexplay::app

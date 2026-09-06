@@ -110,6 +110,15 @@ target_link_libraries(nexplay_replay_test PRIVATE
 
 enable_testing()
 
+add_executable(save_workflow_tests tests/SaveWorkflowTests.cpp src/app/FfmpegProgress.cpp)
+target_compile_features(save_workflow_tests PRIVATE cxx_std_20)
+target_compile_definitions(save_workflow_tests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_include_directories(save_workflow_tests PRIVATE src)
+if(MSVC)
+    target_compile_options(save_workflow_tests PRIVATE /W4 /permissive- /utf-8)
+endif()
+add_test(NAME save_workflow COMMAND save_workflow_tests)
+
 add_executable(thumbnail_selection_tests tests/ThumbnailSelectionTests.cpp)
 target_compile_features(thumbnail_selection_tests PRIVATE cxx_std_20)
 target_include_directories(thumbnail_selection_tests PRIVATE src)
@@ -131,6 +140,8 @@ add_test(NAME preview_audio_policy COMMAND preview_audio_tests)
 # Content-level regression: works headlessly, without speakers or a capture device.
 find_program(NEXPLAY_TEST_FFMPEG NAMES ffmpeg)
 if(NEXPLAY_TEST_FFMPEG)
+    add_test(NAME save_progress_process COMMAND save_workflow_tests "${NEXPLAY_TEST_FFMPEG}")
+    set_tests_properties(save_progress_process PROPERTIES TIMEOUT 30)
     add_test(NAME preview_audio_identity COMMAND ${CMAKE_COMMAND}
         "-DFFMPEG=${NEXPLAY_TEST_FFMPEG}"
         "-DTEST_EXE=$<TARGET_FILE:preview_audio_tests>"
@@ -241,6 +252,8 @@ add_executable(nexplay WIN32
     src/playback/PreviewAudio.cpp
     src/playback/Mp4AudioSource.cpp
     src/app/RecorderEngine.cpp
+    src/app/FfmpegProgress.cpp
+    src/ui/SaveToasts.cpp
     src/audio/AudioSessionScanner.cpp
     src/audio/PcmAudioCapture.cpp
     src/capture/DesktopDuplicator.cpp
@@ -299,3 +312,15 @@ if(MSVC)
 endif()
 get_target_property(nexplay_libraries nexplay LINK_LIBRARIES)
 target_link_libraries(nexplay_ui_preview PRIVATE ${nexplay_libraries} windowscodecs)
+
+# Explicit opt-in test: briefly displays only its own synthetic, silent overlays.
+add_executable(save_toast_native_tests EXCLUDE_FROM_ALL
+    tests/SaveToastNativeTests.cpp src/ui/SaveToasts.cpp)
+target_compile_features(save_toast_native_tests PRIVATE cxx_std_20)
+target_compile_definitions(save_toast_native_tests PRIVATE
+    UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN WINVER=0x0A00 _WIN32_WINNT=0x0A00)
+target_include_directories(save_toast_native_tests PRIVATE src)
+target_link_libraries(save_toast_native_tests PRIVATE d2d1 dwrite gdi32 user32 ole32)
+if(MSVC)
+    target_compile_options(save_toast_native_tests PRIVATE /W4 /permissive- /utf-8)
+endif()

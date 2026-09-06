@@ -1,4 +1,6 @@
 #include "app/RecorderEngine.h"
+#include "app/Shortcut.h"
+#include "ui/SaveToasts.h"
 #include "audio/AudioSessionScanner.h"
 #include "playback/PreviewAudio.h"
 #include "playback/ThumbnailSelection.h"
@@ -47,6 +49,7 @@ constexpr UINT exitFullscreenMessage = WM_APP + 5;
 constexpr UINT thumbnailReadyMessage = WM_APP + 6;
 constexpr UINT clearEditorFocusMessage = WM_APP + 7;
 constexpr UINT togglePlaybackMessage = WM_APP + 8;
+constexpr UINT saveProgressMessage = WM_APP + 9;
 constexpr int saveHotkeyId = 1;
 constexpr int stopHotkeyId = 2;
 float windowWidth = 1240.0F;
@@ -109,6 +112,12 @@ enum class HitTarget {
     autoBufferToggle,
     saveHotkey,
     stopHotkey,
+    saveHotkeyToggle,
+    stopHotkeyToggle,
+    toastTopLeft,
+    toastTopRight,
+    toastBottomLeft,
+    toastBottomRight,
     accentPlane,
     accentHue,
     count,
@@ -145,6 +154,10 @@ Rect openClipsRect, clipsListRect, durationFieldRect, resolutionFieldRect, fpsFi
 Rect editorBackRect, editorPlayRect, editorFullscreenRect, editorMergeAudioRect, editorCutModeRect;
 Rect editorSaveRect, editorNameRect, editorTimelineRect;
 Rect autostartRect, autoBufferRect, saveHotkeyRect, stopHotkeyRect;
+Rect saveHotkeyToggleRect, stopHotkeyToggleRect, notificationsPanelRect;
+std::array<Rect, 4> toastCornerRects;
+constexpr std::array toastCornerLabels{L"Lewy górny", L"Prawy górny", L"Lewy dolny",
+                                       L"Prawy dolny"};
 Rect accentPlaneRect, accentHueRect, accentPreviewRect;
 Rect replayHeroRect, qualityPanelRect, audioPanelRect, audioRowsRect;
 Rect previewPanelRect, videoSurfaceRect, inspectorRect, timelinePanelRect, editorAudioRowsRect;
@@ -218,13 +231,24 @@ void computeLayout(const float widthPixels, const float heightPixels) {
     const float settingsSplit = contentLeft + width * 0.57F;
     startupPanelRect = {contentLeft, 166, settingsSplit - 16, 408};
     hotkeysPanelRect = {contentLeft, 426, settingsSplit - 16, windowHeight - 60};
-    colorPanelRect = {settingsSplit, 166, contentRight, windowHeight - 60};
+    colorPanelRect = {settingsSplit, 166, contentRight, windowHeight - 254};
+    notificationsPanelRect = {settingsSplit, windowHeight - 238, contentRight, windowHeight - 60};
+    const float cornerWidth = (contentRight - settingsSplit - 60) / 2;
+    for (int i = 0; i < 4; ++i) {
+        const float x = settingsSplit + 24 + (i % 2) * (cornerWidth + 12);
+        const float y = notificationsPanelRect.top + 78 + (i / 2) * 40;
+        toastCornerRects[i] = {x, y, x + cornerWidth, y + 32};
+    }
     autostartRect = {contentLeft + 20, 236, settingsSplit - 36, 304};
     autoBufferRect = {contentLeft + 20, 316, settingsSplit - 36, 390};
     saveHotkeyRect = {contentLeft + 20, 502, settingsSplit - 36, 556};
     stopHotkeyRect = {contentLeft + 20, 566, settingsSplit - 36, 620};
+    saveHotkeyToggleRect = {saveHotkeyRect.right - 52, saveHotkeyRect.top + 16,
+                            saveHotkeyRect.right - 12, saveHotkeyRect.top + 38};
+    stopHotkeyToggleRect = {stopHotkeyRect.right - 52, stopHotkeyRect.top + 16,
+                            stopHotkeyRect.right - 12, stopHotkeyRect.top + 38};
     const float pickerSide =
-        std::min(colorPanelRect.right - colorPanelRect.left - 76, windowHeight - 440);
+        std::min(colorPanelRect.right - colorPanelRect.left - 76, colorPanelRect.bottom - 374);
     accentPlaneRect = {settingsSplit + 24, 262, settingsSplit + 24 + pickerSide, 262 + pickerSide};
     accentHueRect = {accentPlaneRect.right + 14, 262, accentPlaneRect.right + 32, 262 + pickerSide};
     accentPreviewRect = {settingsSplit + 24, accentPlaneRect.bottom + 28, contentRight - 24,
@@ -364,6 +388,10 @@ struct AppState final {
     Rect clipContextMenuRect{};
     bool autostart{};
     bool autoBuffer{};
+    bool saveHotkeyEnabled{true};
+    bool stopHotkeyEnabled{true};
+    nexplay::ui::ToastCorner toastCorner{nexplay::ui::ToastCorner::bottomRight};
+    nexplay::ui::SaveToasts saveToasts;
     UINT saveHotkeyVk{VK_F8};
     UINT saveHotkeyModifiers{};
     UINT stopHotkeyVk{VK_F9};
@@ -571,6 +599,7 @@ void applyAccentColor(AppState& state) {
         state.accentHue + 0.075F,
         std::clamp(state.accentSaturation * 0.88F, 0.0F, 1.0F),
         std::clamp(state.accentValue * 1.05F, 0.0F, 1.0F));
+    state.saveToasts.configure(state.toastCorner, primary);
 }
 
 [[nodiscard]] DWORD packedAccentColor(const AppState& state) {
@@ -689,11 +718,14 @@ LRESULT CALLBACK passiveKeyboardProcedure(
                         keyboardKeysDown[VK_LMENU] || keyboardKeysDown[VK_RMENU]) {
                         modifiers |= MOD_ALT;
                     }
-                    if (key->vkCode == keyboardHookState->saveHotkeyVk &&
-                        modifiers == keyboardHookState->saveHotkeyModifiers) {
+                    if (nexplay::app::shortcutMatches(
+                            keyboardHookState->saveHotkeyEnabled, keyboardHookState->saveHotkeyVk,
+                            keyboardHookState->saveHotkeyModifiers, key->vkCode, modifiers)) {
                         PostMessageW(keyboardHookWindow, WM_HOTKEY, saveHotkeyId, 0);
-                    } else if (key->vkCode == keyboardHookState->stopHotkeyVk &&
-                               modifiers == keyboardHookState->stopHotkeyModifiers) {
+                    } else if (nexplay::app::shortcutMatches(keyboardHookState->stopHotkeyEnabled,
+                                                             keyboardHookState->stopHotkeyVk,
+                                                             keyboardHookState->stopHotkeyModifiers,
+                                                             key->vkCode, modifiers)) {
                         PostMessageW(keyboardHookWindow, WM_HOTKEY, stopHotkeyId, 0);
                     }
                 }
@@ -733,6 +765,10 @@ LRESULT CALLBACK passiveKeyboardProcedure(
 void loadPersistentSettings(AppState& state) {
     state.autostart = autostartIsEnabled();
     state.autoBuffer = readSettingDword(L"AutoBuffer", 0) != 0;
+    state.saveHotkeyEnabled = readSettingDword(L"SaveHotkeyEnabled", 1) != 0;
+    state.stopHotkeyEnabled = readSettingDword(L"StopHotkeyEnabled", 1) != 0;
+    state.toastCorner =
+        static_cast<nexplay::ui::ToastCorner>(std::min(3UL, readSettingDword(L"ToastCorner", 3)));
     state.autostartAnimation = state.autostart ? 1.0F : 0.0F;
     state.autoBufferAnimation = state.autoBuffer ? 1.0F : 0.0F;
     state.microphone = readSettingDword(L"Microphone", 1) != 0;
@@ -1666,9 +1702,13 @@ void drawSidebar(AppState &state) {
         fillRounded(state, {102, y, 188, y + 30}, 5, field);
         drawCenteredText(state, key, {102, y, 188, y + 30}, state.smallFormat.Get(), white);
     };
-    shortcut(windowHeight - 123, hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk),
+    shortcut(windowHeight - 123,
+             state.saveHotkeyEnabled ? hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk)
+                                     : L"Wyłączony",
              L"Zapis klipu");
-    shortcut(windowHeight - 81, hotkeyLabel(state.stopHotkeyModifiers, state.stopHotkeyVk),
+    shortcut(windowHeight - 81,
+             state.stopHotkeyEnabled ? hotkeyLabel(state.stopHotkeyModifiers, state.stopHotkeyVk)
+                                     : L"Wyłączony",
              L"Zatrzymaj");
 }
 
@@ -1787,7 +1827,10 @@ void drawReplayPage(AppState &state) {
              state.smallFormat.Get(), muted);
     drawText(state, running ? L"Jesteś w grze." : L"Gotowy na kolejny moment.",
              {x, 231, replayHeroRect.right - 20, 275}, state.headingFormat.Get(), white);
-    drawText(state, L"Ostatnie " + state.durationText + L" s zapiszesz jednym skrótem.",
+    drawText(state,
+             L"Ostatnie " + state.durationText +
+                 (state.saveHotkeyEnabled ? L" s zapiszesz jednym skrótem."
+                                          : L" s zapiszesz przyciskiem poniżej."),
              {x, 270, replayHeroRect.right - 20, 297}, state.bodyFormat.Get(), muted);
     drawButton(state, startRect, running ? L"Zatrzymaj bufor" : L"Uruchom bufor",
                HitTarget::startStop, true);
@@ -1888,9 +1931,11 @@ void drawClipsPage(AppState &state) {
             state.headingFormat.Get(), white);
         drawCenteredText(
             state,
-            L"Uruchom bufor, a potem naciśnij " +
-                hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk) +
-                L", aby zapisać pierwszy klip.",
+            state.saveHotkeyEnabled
+                ? L"Uruchom bufor, a potem naciśnij " +
+                      hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk) +
+                      L", aby zapisać pierwszy klip."
+                : L"Uruchom bufor i kliknij Zapisz klip w zakładce Nagrywanie.",
             {contentLeft, windowHeight * 0.40F + 106, contentRight, windowHeight * 0.40F + 136},
             state.bodyFormat.Get(), muted);
         return;
@@ -2225,6 +2270,7 @@ void drawSettingsPage(AppState &state) {
     panel(state, startupPanelRect);
     panel(state, hotkeysPanelRect);
     panel(state, colorPanelRect);
+    panel(state, notificationsPanelRect);
     drawText(state, L"Uruchamianie", {contentLeft + 20, 188, startupPanelRect.right - 20, 218},
              state.headingFormat.Get(), white);
     const auto startup = [&](Rect r, HitTarget target, const wchar_t *title, const wchar_t *sub,
@@ -2245,27 +2291,45 @@ void drawSettingsPage(AppState &state) {
     drawText(state, L"Skróty klawiaturowe",
              {contentLeft + 20, 448, hotkeysPanelRect.right - 20, 478}, state.headingFormat.Get(),
              white);
-    const auto hotkey = [&](Rect r, HitTarget target, HotkeyCapture capture, const wchar_t *title,
-                            UINT key, UINT modifiers) {
+    const auto hotkey = [&](Rect r, HitTarget target, HotkeyCapture capture, const wchar_t* title,
+                            UINT key, UINT modifiers, bool enabled, Rect toggle) {
         const bool listening = state.hotkeyCapture == capture;
         fillRounded(state, r, 7, listening ? field : card);
         strokeRounded(state, r, 7, listening ? primary : border);
-        drawText(state, title, {r.left + 14, r.top + 18, r.right - 156, r.bottom},
-                 state.bodyFormat.Get(), white);
-        const Rect cap{r.right - 146, r.top + 10, r.right - 10, r.bottom - 10};
+        drawText(state, title, {r.left + 14, r.top + 17, r.right - 210, r.bottom},
+                 state.bodyFormat.Get(), enabled ? white : muted);
+        const Rect cap{r.right - 198, r.top + 10, r.right - 64, r.bottom - 10};
         fillRounded(state, cap, 5, field);
         drawCenteredText(state, listening ? L"Naciśnij klawisz…" : hotkeyLabel(modifiers, key), cap,
-                         state.smallFormat.Get(), listening ? primaryHover : white);
+                         state.smallFormat.Get(),
+                         listening ? primaryHover
+                         : enabled ? white
+                                   : muted);
+        drawToggle(state, toggle, enabled ? 1.0F : 0.0F);
         if (hoverValue(state, target) > 0.1F)
             strokeRounded(state, r, 7, muted);
     };
     hotkey(saveHotkeyRect, HitTarget::saveHotkey, HotkeyCapture::save, L"Zapisz klip",
-           state.saveHotkeyVk, state.saveHotkeyModifiers);
+           state.saveHotkeyVk, state.saveHotkeyModifiers, state.saveHotkeyEnabled,
+           saveHotkeyToggleRect);
     hotkey(stopHotkeyRect, HitTarget::stopHotkey, HotkeyCapture::stop, L"Zatrzymaj bufor",
-           state.stopHotkeyVk, state.stopHotkeyModifiers);
-    drawText(state, L"Kliknij skrót i wciśnij nową kombinację. Esc anuluje.",
+           state.stopHotkeyVk, state.stopHotkeyModifiers, state.stopHotkeyEnabled,
+           stopHotkeyToggleRect);
+    drawText(state, L"Kliknij, aby zmienić. Przełącznik wyłącza skrót. Esc anuluje.",
              {contentLeft + 20, 638, hotkeysPanelRect.right - 20, 670}, state.smallFormat.Get(),
              muted);
+    drawText(state, L"Powiadomienia zapisu",
+             {notificationsPanelRect.left + 24, notificationsPanelRect.top + 18, contentRight - 24,
+              notificationsPanelRect.top + 44},
+             state.headingFormat.Get(), white);
+    drawText(state, L"Róg głównego ekranu · bez dźwięku",
+             {notificationsPanelRect.left + 24, notificationsPanelRect.top + 48, contentRight - 24,
+              notificationsPanelRect.top + 70},
+             state.smallFormat.Get(), muted);
+    for (int i = 0; i < 4; ++i)
+        drawButton(state, toastCornerRects[i], toastCornerLabels[i],
+                   static_cast<HitTarget>(static_cast<int>(HitTarget::toastTopLeft) + i),
+                   static_cast<int>(state.toastCorner) == i);
     drawText(state, L"Wygląd", {colorPanelRect.left + 24, 188, contentRight - 24, 218},
              state.headingFormat.Get(), white);
     drawText(state, L"Kolor akcentu", {colorPanelRect.left + 24, 227, contentRight - 24, 251},
@@ -3017,6 +3081,11 @@ void startRecorder(const HWND window, AppState& state) {
                 if (!PostMessageW(window, statusMessage, 0, reinterpret_cast<LPARAM>(owned))) {
                     delete owned;
                 }
+            },
+            [window](nexplay::app::SaveProgress progress) {
+                auto* owned = new nexplay::app::SaveProgress(std::move(progress));
+                if (!PostMessageW(window, saveProgressMessage, 0, reinterpret_cast<LPARAM>(owned)))
+                    delete owned;
             });
         updateEditorVisibility(state);
         setStatus(window, state, L"Uruchamianie NVENC i źródeł audio…");
@@ -3027,14 +3096,22 @@ void startRecorder(const HWND window, AppState& state) {
 
 void stopRecorder(const HWND window, AppState& state) {
     setStatus(window, state, L"Zatrzymywanie bufora…");
-    state.engine.stop();
+    // Let outstanding save jobs report progress while the capture worker shuts down.
+    state.engine.requestStop();
     updateEditorVisibility(state);
-    setStatus(window, state, L"Bufor zatrzymany");
 }
 
 void saveClip(const HWND window, AppState& state) {
     if (!state.engine.isRunning()) return;
-    state.engine.requestSave();
+    const auto id = state.engine.requestSave();
+    if (!id)
+        return;
+    try {
+        state.saveToasts.configure(state.toastCorner, primary);
+        state.saveToasts.update({id, nexplay::app::SavePhase::queued, 0, {}});
+    } catch (...) {
+        // Saving must continue even if the display cannot create an overlay.
+    }
     setStatus(window, state, L"Zapisuję klip i zeruję bufor…");
 }
 
@@ -3126,6 +3203,13 @@ void exportEditor(const HWND window, AppState& state) {
     } else if (state.page == Page::settings) {
         if (autostartRect.contains(x, y)) return HitTarget::autostartToggle;
         if (autoBufferRect.contains(x, y)) return HitTarget::autoBufferToggle;
+        if (saveHotkeyToggleRect.contains(x, y))
+            return HitTarget::saveHotkeyToggle;
+        if (stopHotkeyToggleRect.contains(x, y))
+            return HitTarget::stopHotkeyToggle;
+        for (int i = 0; i < 4; ++i)
+            if (toastCornerRects[i].contains(x, y))
+                return static_cast<HitTarget>(static_cast<int>(HitTarget::toastTopLeft) + i);
         if (saveHotkeyRect.contains(x, y)) return HitTarget::saveHotkey;
         if (stopHotkeyRect.contains(x, y)) return HitTarget::stopHotkey;
         if (fixedAspectRect(state.mainWindow, accentPlaneRect).contains(x, y)) {
@@ -3298,7 +3382,8 @@ void paintTrayMenu(const HWND window, AppState& state) {
         drawTrayMenuRow(state, 0, trayShowRect, L"Otwórz NexPlay", true);
         drawTrayMenuRow(state, 1, traySaveRect, L"Zapisz klip", running);
         const std::wstring shortcut =
-            hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk);
+            state.saveHotkeyEnabled ? hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk)
+                                    : L"Wyłączony";
         const D2D1_COLOR_F shortcutColor = running ? muted : blendColor(muted, background, 0.40F);
         trayFillRounded(state, {200, 127, 284, 150}, 6,
                         running ? field : blendColor(field, background, 0.48F));
@@ -3840,6 +3925,27 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
     case HitTarget::saveHotkey:
         beginHotkeyCapture(window, state, HotkeyCapture::save);
         InvalidateRect(window, nullptr, FALSE);
+        return;
+    case HitTarget::saveHotkeyToggle:
+    case HitTarget::stopHotkeyToggle: {
+        const bool save = clicked == HitTarget::saveHotkeyToggle;
+        bool& enabled = save ? state.saveHotkeyEnabled : state.stopHotkeyEnabled;
+        enabled = !enabled;
+        writeSettingDword(save ? L"SaveHotkeyEnabled" : L"StopHotkeyEnabled", enabled ? 1 : 0);
+        setStatus(window, state,
+                  enabled ? L"Skrót włączony"
+                          : L"Skrót wyłączony — przyciski aplikacji nadal działają");
+        return;
+    }
+    case HitTarget::toastTopLeft:
+    case HitTarget::toastTopRight:
+    case HitTarget::toastBottomLeft:
+    case HitTarget::toastBottomRight:
+        state.toastCorner = static_cast<nexplay::ui::ToastCorner>(
+            static_cast<int>(clicked) - static_cast<int>(HitTarget::toastTopLeft));
+        writeSettingDword(L"ToastCorner", static_cast<DWORD>(state.toastCorner));
+        state.saveToasts.configure(state.toastCorner, primary);
+        setStatus(window, state, L"Zmieniono róg powiadomień zapisu");
         return;
     case HitTarget::stopHotkey:
         beginHotkeyCapture(window, state, HotkeyCapture::stop);
@@ -4420,11 +4526,25 @@ LRESULT CALLBACK windowProcedure(
         }
         return 0;
     case WM_HOTKEY:
-        if (state != nullptr && wParam == saveHotkeyId) saveClip(window, *state);
-        else if (state != nullptr && wParam == stopHotkeyId && state->engine.isRunning()) {
+        if (state != nullptr && state->saveHotkeyEnabled && wParam == saveHotkeyId)
+            saveClip(window, *state);
+        else if (state != nullptr && state->stopHotkeyEnabled && wParam == stopHotkeyId &&
+                 state->engine.isRunning()) {
             stopRecorder(window, *state);
         }
         return 0;
+    case saveProgressMessage: {
+        std::unique_ptr<nexplay::app::SaveProgress> progress(
+            reinterpret_cast<nexplay::app::SaveProgress*>(lParam));
+        if (state && progress) {
+            try {
+                state->saveToasts.configure(state->toastCorner, primary);
+                state->saveToasts.update(std::move(*progress));
+            } catch (...) {
+            }
+        }
+        return 0;
+    }
     case statusMessage:
         if (state != nullptr) {
             std::unique_ptr<std::wstring> text(reinterpret_cast<std::wstring*>(lParam));
@@ -4497,6 +4617,11 @@ LRESULT CALLBACK windowProcedure(
             saveAccentColor(*state);
             closeEditorPlayer(*state);
             state->engine.stop();
+            state->saveToasts.close();
+            MSG pendingSave{};
+            while (PeekMessageW(&pendingSave, window, saveProgressMessage, saveProgressMessage,
+                                PM_REMOVE))
+                delete reinterpret_cast<nexplay::app::SaveProgress*>(pendingSave.lParam);
             KillTimer(window, 1);
             if (state->trayMenuWindow != nullptr) {
                 DestroyWindow(state->trayMenuWindow);

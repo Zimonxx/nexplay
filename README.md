@@ -17,7 +17,8 @@ NexPlay to lekka nagrywarka powtórek dla Windows, korzystająca ze sprzętowego
 - łączenie wybranych aplikacji w jedną nazwaną ścieżkę audio,
 - możliwość wykluczania wybranych aplikacji i mikrofonu z nagrania,
 - globalne skróty działające również wtedy, gdy NexPlay jest aktywnym oknem,
-- zmiana skrótów i koloru akcentu w ustawieniach,
+- zmiana lub niezależne wyłączanie skrótów i zmiana koloru akcentu w ustawieniach,
+- ciche powiadomienia zapisu z procentem postępu, wyborem rogu ekranu i obsługą kilku klipów naraz,
 - automatyczne uruchamianie z Windows i automatyczny start bufora,
 - biblioteka klipów w formie siatki z miniaturami przechowywanymi w pamięci,
 - podgląd klatka po klatce podczas przesuwania kursora po miniaturze,
@@ -55,7 +56,11 @@ Domyślne skróty globalne:
 - `F8` — zapisz ostatni fragment i wyzeruj bufor,
 - `F9` — zatrzymaj nagrywanie.
 
-Skróty można zmienić w ustawieniach. NexPlay może działać w tle w zasobniku systemowym. Zapisane klipy trafiają domyślnie do:
+Skróty można zmienić w ustawieniach. Przełącznik obok każdego skrótu wyłącza go bez usuwania zapisanej kombinacji; przyciski aplikacji i menu w zasobniku nadal działają. Klawisze nie są blokowane innym aplikacjom.
+
+W sekcji **Powiadomienia zapisu** wybierz jeden z czterech rogów głównego monitora. Po zleceniu zapisu pojawi się cichy toast z procentem przygotowania danych i postępem FFmpeg. Kilka zapisów tworzy stos osobnych powiadomień. Po ukończeniu tekst **Zapisano klip** pozostaje widoczny przez 2 sekundy, a potem płynnie znika. Komunikat błędu pozostaje przez 5 sekund. Powiadomienia nie przejmują fokusu i są wykluczone z przechwytywanego obrazu.
+
+NexPlay może działać w tle w zasobniku systemowym. Zapisane klipy trafiają domyślnie do:
 
 ```text
 %USERPROFILE%\Videos\NexPlay\Clips
@@ -141,6 +146,11 @@ cmake --build --preset windows-x64-release --target nexplay_ui_preview
 Podglądy zawierają dane testowe. Narzędzie nie otwiera okna, nie nagrywa ekranu i nie instaluje skrótów. Nie zastępuje ręcznej kontroli odtwarzania ani systemowych animacji okna.
 
 Opcjonalny argument `--window-frame` uruchamia dodatkowo test geometrii ramki na osobnym, niewidocznym oknie, bez uruchamiania nagrywarki. Zamiast tej opcji można podać ścieżkę do krótkiego pliku testowego MP4 (co najmniej 61 klatek), aby porównać miniatury z pełnym dekodowaniem przez FFmpeg.
+
+Podgląd zawiera też plik `save-toasts.png` z powiadomieniami zapisu. Opcjonalny cel
+`save_toast_native_tests` sprawdza rzeczywiste nakładki: wyświetla na chwilę dwa
+syntetyczne, bezgłośne toasty, bez nagrywania ekranu i tworzenia klipów. Nie należy
+do domyślnego zestawu testów, ponieważ pokazuje okna na pulpicie.
 
 ## Wydania
 

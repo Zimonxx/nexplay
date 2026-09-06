@@ -159,6 +159,13 @@ bool containsRect(Rect parent, Rect child) {
            child.right > child.left && child.bottom > child.top;
 }
 void validateLayout() {
+    for (const auto& corner : toastCornerRects)
+        if (!containsRect(notificationsPanelRect, corner))
+            throw std::runtime_error("Toast corner selector outside settings panel");
+    if (!containsRect(saveHotkeyRect, saveHotkeyToggleRect) ||
+        !containsRect(stopHotkeyRect, stopHotkeyToggleRect) ||
+        colorPanelRect.bottom >= notificationsPanelRect.top)
+        throw std::runtime_error("Shortcut toggles or notification panel overlap");
     if (!containsRect(replayHeroRect, startRect) || !containsRect(replayHeroRect, saveRect) ||
         !containsRect(qualityPanelRect, durationFieldRect) ||
         !containsRect(qualityPanelRect, resolutionFieldRect) ||
@@ -214,6 +221,11 @@ void validateHitTargets(AppState &state) {
     } else if (state.page == Page::settings) {
         checkTarget(autostartRect, HitTarget::autostartToggle);
         checkTarget(saveHotkeyRect, HitTarget::saveHotkey);
+        checkTarget(saveHotkeyToggleRect, HitTarget::saveHotkeyToggle);
+        checkTarget(stopHotkeyToggleRect, HitTarget::stopHotkeyToggle);
+        for (int i = 0; i < 4; ++i)
+            checkTarget(toastCornerRects[i],
+                        static_cast<HitTarget>(static_cast<int>(HitTarget::toastTopLeft) + i));
         checkTarget(accentPlaneRect, HitTarget::accentPlane);
         checkTarget(accentHueRect, HitTarget::accentHue);
     } else if (state.page == Page::editor) {
@@ -257,6 +269,7 @@ int wmain(int argc, wchar_t **argv) {
             computeLayout(static_cast<float>(size.cx), static_cast<float>(size.cy));
             validateLayout();
             AppState state;
+            state.stopHotkeyEnabled = false;
             state.status = L"Podgląd interfejsu · dane testowe";
             for (int i = 0; i < 8; ++i) {
                 state.audioRows.push_back(
@@ -329,6 +342,30 @@ int wmain(int argc, wchar_t **argv) {
                                 (audioDialog ? L"1240-audio-group.png" : L"1240-context-menu.png"));
                 }
             }
+        }
+        {
+            AppState state;
+            check(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_PPV_ARGS(&state.wicFactory)));
+            ComPtr<IWICBitmap> bitmap;
+            check(state.wicFactory->CreateBitmap(400, 396, GUID_WICPixelFormat32bppPBGRA,
+                                                 WICBitmapCacheOnLoad, &bitmap));
+            ensureGraphics(nullptr, state, bitmap.Get());
+            state.renderTarget->BeginDraw();
+            state.renderTarget->Clear(background);
+            const std::array<nexplay::ui::ToastEntry, 3> entries{
+                {{{1, nexplay::app::SavePhase::encoding, 37, L"NexPlay-20260906-rozgrywka.mp4"}},
+                 {{2, nexplay::app::SavePhase::saved, 100, L"Najlepszy moment.mp4"}},
+                 {{3, nexplay::app::SavePhase::failed, 82, L"Brak miejsca na dysku."}}}};
+            for (int i = 0; i < 3; ++i) {
+                state.renderTarget->SetTransform(
+                    D2D1::Matrix3x2F::Translation(20, 20.0F + i * 122));
+                nexplay::ui::drawSaveToast(state.renderTarget.Get(), state.writeFactory.Get(),
+                                           entries[i], primary);
+            }
+            state.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+            check(state.renderTarget->EndDraw());
+            savePng(state, bitmap.Get(), folder / L"save-toasts.png");
         }
         std::cout << "Layout and aspect checks passed at 16 sizes. Pointer checks passed on all "
                      "pages. Rendered 12 page previews and 2 dialog previews.\n";
