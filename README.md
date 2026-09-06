@@ -28,9 +28,9 @@ NexPlay to lekka nagrywarka powtórek dla Windows, korzystająca ze sprzętowego
 - usuwanie zaznaczonego fragmentu ze środka i składanie pozostałości w jeden klip,
 - wspólny timeline V1/A1–An z jedną skalą czasu, wyciszaniem i zakresem słyszalności ścieżek,
 - opcja połączenia końcowej edycji w jedną ścieżkę audio,
-- ciemny, autorski interfejs AMOLED z animacjami i konfigurowalnym akcentem.
-- responsywne okno wykorzystujące całą dostępną szerokość i wysokość ekranu,
-- przycisk maksymalizacji i przywracania rozmiaru okna.
+- ciemny interfejs studia z boczną nawigacją, panelem eksportu i konfigurowalnym akcentem,
+- responsywne okno: siatka klipów i timeline dopasowują się do dostępnego miejsca, bez rozciągania ikon i checkboxów,
+- maksymalizacja do obszaru roboczego Windows i przywracanie rozmiaru okna.
 
 ## Wymagania
 
@@ -69,9 +69,16 @@ Roboczy bufor nagrania jest przechowywany w:
 
 ## Biblioteka i edycja klipów
 
-Zakładka **Biblioteka klipów** pokazuje nagrania w siatce. Przesunięcie kursora po miniaturze pozwala podejrzeć dokładną klatkę odpowiadającą pozycji kursora. Kliknięcie otwiera klip w odtwarzaczu, a prawy przycisk myszy udostępnia najważniejsze operacje na pliku.
+Zakładka **Biblioteka** pokazuje nagrania w siatce, której liczba kolumn zależy od szerokości okna. Przesunięcie kursora po miniaturze pozwala podejrzeć dokładną klatkę odpowiadającą pozycji kursora. Kliknięcie otwiera klip w odtwarzaczu, a prawy przycisk myszy udostępnia najważniejsze operacje na pliku.
 
-W odtwarzaczu można przewijać nagranie bez jego modyfikowania, przełączyć obraz na pełny ekran i sterować odtwarzaniem klawiaturą. Edytor pozwala wyznaczyć początek oraz koniec klipu i zapisać przyciętą wersję.
+W odtwarzaczu można przewijać nagranie bez jego modyfikowania, przełączyć obraz na pełny ekran i sterować odtwarzaniem klawiaturą. Podgląd znajduje się nad wspólnym timeline obrazu i dźwięku, a po prawej jest panel eksportu.
+
+- Kliknij obraz lub naciśnij `Spację`, aby zatrzymać albo wznowić film.
+- Kliknij podziałkę czasu, aby przewinąć bez zmiany zakresu klipu.
+- Przeciągnij uchwyty ścieżki **V1**, aby ustawić początek i koniec.
+- W panelu eksportu przełącz **Przycinanie brzegów** na **Wycinanie fragmentu**, aby usunąć zaznaczony środek i połączyć pozostałości w jeden plik.
+- Checkboxy **A1–An** wykluczają ścieżki z eksportu; uchwyty na ścieżkach określają ich słyszalny zakres. Przewiń listę kółkiem myszy, aby zobaczyć kolejne ścieżki.
+- Wpisz nazwę nowego pliku, opcjonalnie włącz **Jedna ścieżka audio** i wybierz **Eksportuj klip**. Oryginał pozostaje bez zmian.
 
 ## Budowanie ze źródeł
 
@@ -116,6 +123,17 @@ cmake --preset windows-x64-debug
 cmake --build --preset windows-x64-debug
 ctest --test-dir out/build/windows-x64-debug -C Debug --output-on-failure
 ```
+
+### Kontrola układu interfejsu
+
+Dodatkowy cel deweloperski sprawdza geometrię paneli, proporcje miniatur i zgodność obszarów kliknięcia. Renderuje 12 podglądów czterech zakładek w trzech rozmiarach oraz podglądy menu klipów i tworzenia grupy audio, używając tego samego renderera co aplikacja:
+
+```powershell
+cmake --build --preset windows-x64-release --target nexplay_ui_preview
+./out/build/windows-x64-release/Release/nexplay_ui_preview.exe ./out/ui-preview
+```
+
+Podglądy zawierają dane testowe. Narzędzie nie otwiera okna, nie nagrywa ekranu i nie instaluje skrótów. Nie zastępuje ręcznej kontroli odtwarzania ani systemowych animacji okna.
 
 ## Wydania
 

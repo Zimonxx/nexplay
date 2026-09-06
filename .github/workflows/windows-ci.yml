@@ -26,6 +26,19 @@ jobs:
       - name: Run tests
         run: ctest --test-dir out/build/windows-x64-release -C Release --output-on-failure
 
+      - name: Validate and render UI layouts
+        run: |
+          cmake --build --preset windows-x64-release --target nexplay_ui_preview
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./out/build/windows-x64-release/Release/nexplay_ui_preview.exe ./out/ui-preview
+
+      - name: Upload UI previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexPlay-ui-previews
+          path: out/ui-preview/*.png
+          if-no-files-found: error
+
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:

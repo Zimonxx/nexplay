@@ -47,21 +47,21 @@ constexpr UINT clearEditorFocusMessage = WM_APP + 7;
 constexpr UINT togglePlaybackMessage = WM_APP + 8;
 constexpr int saveHotkeyId = 1;
 constexpr int stopHotkeyId = 2;
-constexpr float windowWidth = 1120.0F;
-constexpr float windowHeight = 800.0F;
+float windowWidth = 1240.0F;
+float windowHeight = 820.0F;
 constexpr float trayMenuWidth = 310.0F;
 constexpr float trayMenuHeight = 238.0F;
 
-constexpr D2D1_COLOR_F background = {0.0F, 0.0F, 0.0F, 1.0F};
-constexpr D2D1_COLOR_F sidebar = {0.012F, 0.012F, 0.018F, 1.0F};
-constexpr D2D1_COLOR_F card = {0.026F, 0.027F, 0.039F, 1.0F};
-constexpr D2D1_COLOR_F field = {0.043F, 0.045F, 0.063F, 1.0F};
-constexpr D2D1_COLOR_F border = {0.100F, 0.106F, 0.145F, 1.0F};
+constexpr D2D1_COLOR_F background = {0.035F, 0.039F, 0.047F, 1.0F};
+constexpr D2D1_COLOR_F sidebar = {0.048F, 0.052F, 0.063F, 1.0F};
+constexpr D2D1_COLOR_F card = {0.065F, 0.071F, 0.084F, 1.0F};
+constexpr D2D1_COLOR_F field = {0.090F, 0.098F, 0.114F, 1.0F};
+constexpr D2D1_COLOR_F border = {0.145F, 0.157F, 0.180F, 1.0F};
 D2D1_COLOR_F primary = {0.435F, 0.259F, 1.0F, 1.0F};
 D2D1_COLOR_F primaryHover = {0.565F, 0.400F, 1.0F, 1.0F};
 D2D1_COLOR_F accentSecondary = {0.176F, 0.651F, 1.0F, 1.0F};
 constexpr D2D1_COLOR_F white = {0.965F, 0.969F, 0.988F, 1.0F};
-constexpr D2D1_COLOR_F muted = {0.488F, 0.506F, 0.588F, 1.0F};
+constexpr D2D1_COLOR_F muted = {0.565F, 0.604F, 0.659F, 1.0F};
 constexpr D2D1_COLOR_F green = {0.173F, 0.949F, 0.616F, 1.0F};
 constexpr D2D1_COLOR_F red = {1.0F, 0.286F, 0.376F, 1.0F};
 
@@ -121,108 +121,134 @@ struct Rect final {
     }
 };
 
-constexpr Rect minimizeRect{994, 15, 1028, 49};
-constexpr Rect maximizeRect{1032, 15, 1066, 49};
-constexpr Rect closeRect{1070, 15, 1104, 49};
-constexpr Rect replayNavRect{16, 112, 204, 160};
-constexpr Rect clipsNavRect{16, 168, 204, 216};
-constexpr Rect settingsNavRect{16, 224, 204, 272};
-constexpr Rect startRect{284, 222, 458, 262};
-constexpr Rect saveRect{470, 222, 644, 262};
-constexpr Rect refreshRect{967, 508, 1050, 542};
-constexpr Rect microphoneRect{760, 508, 946, 542};
-constexpr Rect createAudioGroupRect{644, 508, 748, 542};
-constexpr Rect audioGroupDialogRect{404, 254, 916, 500};
-constexpr Rect audioGroupNameRect{444, 350, 876, 398};
-constexpr Rect cancelAudioGroupRect{624, 430, 738, 470};
-constexpr Rect confirmAudioGroupRect{750, 430, 876, 470};
-constexpr Rect openClipsRect{900, 91, 1060, 129};
-constexpr Rect clipsListRect{260, 162, 1060, 746};
-constexpr Rect durationFieldRect{284, 405, 464, 455};
-constexpr Rect resolutionFieldRect{478, 405, 680, 455};
-constexpr Rect fpsFieldRect{694, 405, 824, 455};
-constexpr Rect bitrateFieldRect{838, 405, 1036, 455};
-constexpr Rect editorBackRect{260, 91, 344, 129};
-constexpr Rect editorPlayRect{284, 724, 334, 764};
-constexpr Rect editorFullscreenRect{346, 724, 396, 764};
-constexpr Rect editorMergeAudioRect{812, 466, 1036, 502};
-constexpr Rect editorCutModeRect{414, 724, 590, 764};
-constexpr Rect editorSaveRect{846, 724, 1036, 764};
-constexpr Rect editorNameRect{284, 466, 654, 506};
-constexpr Rect editorTimelineRect{470, 536, 1030, 568};
-constexpr Rect autostartRect{280, 210, 1040, 264};
-constexpr Rect autoBufferRect{280, 270, 1040, 324};
-constexpr Rect saveHotkeyRect{280, 410, 650, 466};
-constexpr Rect stopHotkeyRect{670, 410, 1040, 466};
-constexpr Rect accentPlaneRect{292, 590, 800, 684};
-constexpr Rect accentHueRect{818, 590, 846, 684};
-constexpr Rect accentPreviewRect{870, 590, 1028, 684};
+// Shared layout for painting, pointer hit tests and the native video surface.
+constexpr float contentLeft = 236.0F;
+constexpr float audioRowHeight = 42.0F;
+constexpr float editorAudioRowHeight = 46.0F;
+float contentRight = 1208;
+Rect minimizeRect, maximizeRect, closeRect;
+Rect replayNavRect, clipsNavRect, settingsNavRect;
+Rect startRect, saveRect, refreshRect, microphoneRect, createAudioGroupRect;
+Rect audioGroupDialogRect, audioGroupNameRect, cancelAudioGroupRect, confirmAudioGroupRect;
+Rect openClipsRect, clipsListRect, durationFieldRect, resolutionFieldRect, fpsFieldRect, bitrateFieldRect;
+Rect editorBackRect, editorPlayRect, editorFullscreenRect, editorMergeAudioRect, editorCutModeRect;
+Rect editorSaveRect, editorNameRect, editorTimelineRect;
+Rect autostartRect, autoBufferRect, saveHotkeyRect, stopHotkeyRect;
+Rect accentPlaneRect, accentHueRect, accentPreviewRect;
+Rect replayHeroRect, qualityPanelRect, audioPanelRect, audioRowsRect;
+Rect previewPanelRect, videoSurfaceRect, inspectorRect, timelinePanelRect, editorAudioRowsRect;
+Rect startupPanelRect, hotkeysPanelRect, colorPanelRect;
+int audioVisibleRows = 5, editorVisibleTracks = 3;
+int clipColumns = 3, clipVisibleRows = 2;
+float clipWidth = 310, clipHeight = 244;
 
-struct DesignViewport final {
-    float scaleX{1.0F};
-    float scaleY{1.0F};
-};
-
-[[nodiscard]] DesignViewport designViewport(const HWND window) {
+void computeLayout(const float widthPixels, const float heightPixels) {
+    windowWidth = widthPixels;
+    windowHeight = heightPixels;
+    contentRight = windowWidth - 32;
+    const float width = contentRight - contentLeft;
+    minimizeRect = {windowWidth - 138, 0, windowWidth - 92, 44};
+    maximizeRect = {windowWidth - 92, 0, windowWidth - 46, 44};
+    closeRect = {windowWidth - 46, 0, windowWidth, 44};
+    replayNavRect = {12, 126, 196, 172};
+    clipsNavRect = {12, 178, 196, 224};
+    settingsNavRect = {12, 230, 196, 276};
+    const float split = contentRight - 336;
+    replayHeroRect = {contentLeft, 166, split - 16, 408};
+    qualityPanelRect = {split, 166, contentRight, 408};
+    startRect = {contentLeft + 24, 335, contentLeft + 180, 377};
+    saveRect = {contentLeft + 192, 335, split - 40, 377};
+    durationFieldRect = {split + 20, 278, split + 158, 326};
+    fpsFieldRect = {split + 174, 278, contentRight - 20, 326};
+    bitrateFieldRect = {split + 174, 346, contentRight - 20, 390};
+    resolutionFieldRect = {split + 20, 346, split + 158, 390};
+    audioPanelRect = {contentLeft, 430, contentRight, windowHeight - 60};
+    audioRowsRect = {contentLeft + 16, 530, contentRight - 16, windowHeight - 76};
+    audioVisibleRows =
+        std::max(1, static_cast<int>((audioRowsRect.bottom - audioRowsRect.top) / audioRowHeight));
+    refreshRect = {contentRight - 110, 452, contentRight - 20, 488};
+    microphoneRect = {contentRight - 250, 452, contentRight - 126, 488};
+    createAudioGroupRect = {contentRight - 360, 452, contentRight - 266, 488};
+    const float cx = windowWidth * 0.5F, cy = windowHeight * 0.5F;
+    audioGroupDialogRect = {cx - 256, cy - 128, cx + 256, cy + 128};
+    audioGroupNameRect = {cx - 224, cy - 22, cx + 224, cy + 24};
+    cancelAudioGroupRect = {cx - 18, cy + 64, cx + 96, cy + 104};
+    confirmAudioGroupRect = {cx + 108, cy + 64, cx + 224, cy + 104};
+    openClipsRect = {contentRight - 142, 96, contentRight, 134};
+    clipsListRect = {contentLeft, 170, contentRight, windowHeight - 60};
+    clipColumns = std::max(2, static_cast<int>((width + 20) / 300));
+    clipWidth = (width - (clipColumns - 1) * 20) / clipColumns;
+    clipHeight = clipWidth * 9 / 16 + 76;
+    clipVisibleRows = std::max(
+        1, static_cast<int>((clipsListRect.bottom - clipsListRect.top + 20) / (clipHeight + 20)));
+    editorBackRect = {contentLeft, 78, contentLeft + 104, 114};
+    const float timelineTop =
+        std::clamp(windowHeight * 0.56F, 398.0F, std::max(398.0F, windowHeight - 260));
+    previewPanelRect = {contentLeft, 134, contentRight - 280, timelineTop - 16};
+    videoSurfaceRect = {previewPanelRect.left + 8, 166, previewPanelRect.right - 8,
+                        previewPanelRect.bottom - 54};
+    editorPlayRect = {previewPanelRect.left + 12, previewPanelRect.bottom - 44,
+                      previewPanelRect.left + 52, previewPanelRect.bottom - 8};
+    editorFullscreenRect = {previewPanelRect.right - 52, previewPanelRect.bottom - 44,
+                            previewPanelRect.right - 12, previewPanelRect.bottom - 8};
+    inspectorRect = {contentRight - 264, 134, contentRight, timelineTop - 16};
+    editorNameRect = {inspectorRect.left + 16, 214, contentRight - 16, 256};
+    editorMergeAudioRect = {inspectorRect.left + 16, 274, contentRight - 16, 312};
+    editorCutModeRect = {inspectorRect.left + 16, 326, contentRight - 16, 362};
+    editorSaveRect = {contentRight - 184, 78, contentRight, 116};
+    timelinePanelRect = {contentLeft, timelineTop, contentRight, windowHeight - 60};
+    editorTimelineRect = {contentLeft + 208, timelineTop + 86, contentRight - 20,
+                          timelineTop + 122};
+    editorAudioRowsRect = {contentLeft + 16, timelineTop + 134, contentRight - 16,
+                           windowHeight - 74};
+    editorVisibleTracks =
+        std::max(1, static_cast<int>((editorAudioRowsRect.bottom - editorAudioRowsRect.top) /
+                                     editorAudioRowHeight));
+    const float settingsSplit = contentLeft + width * 0.57F;
+    startupPanelRect = {contentLeft, 166, settingsSplit - 16, 408};
+    hotkeysPanelRect = {contentLeft, 426, settingsSplit - 16, windowHeight - 60};
+    colorPanelRect = {settingsSplit, 166, contentRight, windowHeight - 60};
+    autostartRect = {contentLeft + 20, 236, settingsSplit - 36, 304};
+    autoBufferRect = {contentLeft + 20, 316, settingsSplit - 36, 390};
+    saveHotkeyRect = {contentLeft + 20, 502, settingsSplit - 36, 556};
+    stopHotkeyRect = {contentLeft + 20, 566, settingsSplit - 36, 620};
+    const float pickerSide =
+        std::min(colorPanelRect.right - colorPanelRect.left - 76, windowHeight - 440);
+    accentPlaneRect = {settingsSplit + 24, 262, settingsSplit + 24 + pickerSide, 262 + pickerSide};
+    accentHueRect = {accentPlaneRect.right + 14, 262, accentPlaneRect.right + 32, 262 + pickerSide};
+    accentPreviewRect = {settingsSplit + 24, accentPlaneRect.bottom + 28, contentRight - 24,
+                         accentPlaneRect.bottom + 92};
+}
+void updateLayout(const HWND window) {
     RECT client{};
     GetClientRect(window, &client);
-    const float width = static_cast<float>(std::max(1L, client.right - client.left));
-    const float height = static_cast<float>(std::max(1L, client.bottom - client.top));
-    return {
-        .scaleX = std::max(0.01F, width / windowWidth),
-        .scaleY = std::max(0.01F, height / windowHeight),
-    };
+    computeLayout(static_cast<float>(std::max(1L, client.right)),
+                  static_cast<float>(std::max(1L, client.bottom)));
 }
-
-[[nodiscard]] D2D1_POINT_2F designPoint(
-    const HWND window, const float x, const float y) {
-    const auto viewport = designViewport(window);
-    return {
-        x / viewport.scaleX,
-        y / viewport.scaleY,
-    };
+[[nodiscard]] D2D1_POINT_2F designPoint(const HWND, const float x, const float y) {
+    return {x, y};
 }
-
-[[nodiscard]] RECT physicalRect(const HWND window, const Rect rectangle) {
-    const auto viewport = designViewport(window);
-    return {
-        static_cast<LONG>(std::lround(rectangle.left * viewport.scaleX)),
-        static_cast<LONG>(std::lround(rectangle.top * viewport.scaleY)),
-        static_cast<LONG>(std::lround(rectangle.right * viewport.scaleX)),
-        static_cast<LONG>(std::lround(rectangle.bottom * viewport.scaleY)),
-    };
+[[nodiscard]] RECT physicalRect(const HWND, const Rect rectangle) {
+    return {static_cast<LONG>(std::lround(rectangle.left)),
+            static_cast<LONG>(std::lround(rectangle.top)),
+            static_cast<LONG>(std::lround(rectangle.right)),
+            static_cast<LONG>(std::lround(rectangle.bottom))};
 }
-
-[[nodiscard]] Rect aspectFitRect(
-    const HWND window, const Rect bounds, const float aspectRatio) {
-    if (window == nullptr || aspectRatio <= 0.0F) return bounds;
-    const auto viewport = designViewport(window);
-    const float availableWidth =
-        (bounds.right - bounds.left) * viewport.scaleX;
-    const float availableHeight =
-        (bounds.bottom - bounds.top) * viewport.scaleY;
-    float fittedWidth = availableWidth;
-    float fittedHeight = availableHeight;
-    if (availableWidth / std::max(1.0F, availableHeight) > aspectRatio) {
-        fittedWidth = availableHeight * aspectRatio;
-    } else {
-        fittedHeight = availableWidth / aspectRatio;
-    }
-    const float designWidth = fittedWidth / viewport.scaleX;
-    const float designHeight = fittedHeight / viewport.scaleY;
-    const float centerX = (bounds.left + bounds.right) * 0.5F;
-    const float centerY = (bounds.top + bounds.bottom) * 0.5F;
-    return {
-        centerX - designWidth * 0.5F,
-        centerY - designHeight * 0.5F,
-        centerX + designWidth * 0.5F,
-        centerY + designHeight * 0.5F,
-    };
+[[nodiscard]] Rect aspectFitRect(const HWND, const Rect bounds, const float ratio) {
+    const float w = bounds.right - bounds.left, h = bounds.bottom - bounds.top;
+    if (w <= 0 || h <= 0 || ratio <= 0)
+        return bounds;
+    const float fitW = std::min(w, h * ratio), fitH = fitW / ratio;
+    const float cx = (bounds.left + bounds.right) * 0.5F, cy = (bounds.top + bounds.bottom) * 0.5F;
+    return {cx - fitW * 0.5F, cy - fitH * 0.5F, cx + fitW * 0.5F, cy + fitH * 0.5F};
 }
-
-[[nodiscard]] Rect fixedAspectRect(const HWND window, const Rect bounds) {
-    const float height = std::max(0.001F, bounds.bottom - bounds.top);
-    return aspectFitRect(window, bounds, (bounds.right - bounds.left) / height);
+[[nodiscard]] Rect fixedAspectRect(const HWND, const Rect bounds) {
+    return bounds;
+}
+[[nodiscard]] Rect clipCardRect(const int visible) {
+    const float left = contentLeft + (visible % clipColumns) * (clipWidth + 20);
+    const float top = clipsListRect.top + (visible / clipColumns) * (clipHeight + 20);
+    return {left, top, left + clipWidth, top + clipHeight};
 }
 
 struct AudioRow final {
@@ -338,6 +364,9 @@ struct AppState final {
     float microphoneAnimation{1.0F};
     float mouseX{-1.0F};
     float mouseY{-1.0F};
+    BOOL clientAnimations{TRUE};
+    Page renderedPage{Page::replay};
+    ULONGLONG pageTransitionStart{};
     std::array<float, static_cast<std::size_t>(HitTarget::count)> hoverAnimation{};
     std::wstring status{L"Gotowy do uruchomienia"};
     NOTIFYICONDATAW tray{};
@@ -353,7 +382,8 @@ struct AppState final {
     ComPtr<ID2D1Factory> d2dFactory;
     ComPtr<IDWriteFactory> writeFactory;
     ComPtr<IWICImagingFactory> wicFactory;
-    ComPtr<ID2D1HwndRenderTarget> renderTarget;
+    ComPtr<ID2D1HwndRenderTarget> windowRenderTarget;
+    ComPtr<ID2D1RenderTarget> renderTarget;
     ComPtr<ID2D1SolidColorBrush> brush;
     std::map<std::wstring, ComPtr<ID2D1Bitmap>> thumbnailBitmaps;
     ComPtr<ID2D1HwndRenderTarget> fullscreenRenderTarget;
@@ -1208,39 +1238,46 @@ void createTextFormat(
     output->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 }
 
-void ensureGraphics(const HWND window, AppState& state) {
-    if (state.renderTarget != nullptr) return;
-    if (state.d2dFactory == nullptr && FAILED(D2D1CreateFactory(
-            D2D1_FACTORY_TYPE_SINGLE_THREADED, IID_PPV_ARGS(&state.d2dFactory)))) {
+void ensureGraphics(const HWND window, AppState& state, IWICBitmap* offscreen = nullptr) {
+    if (state.renderTarget != nullptr)
+        return;
+    if (state.d2dFactory == nullptr && FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                                                                IID_PPV_ARGS(&state.d2dFactory)))) {
         throw std::runtime_error("Nie mozna uruchomic renderowania interfejsu.");
     }
-    if (state.writeFactory == nullptr && FAILED(DWriteCreateFactory(
-            DWRITE_FACTORY_TYPE_SHARED,
-            __uuidof(IDWriteFactory),
-            reinterpret_cast<IUnknown**>(state.writeFactory.GetAddressOf())))) {
+    if (state.writeFactory == nullptr &&
+        FAILED(DWriteCreateFactory(
+            DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+            reinterpret_cast<IUnknown **>(state.writeFactory.GetAddressOf())))) {
         throw std::runtime_error("Nie mozna uruchomic tekstu interfejsu.");
     }
-    if (state.wicFactory == nullptr && FAILED(CoCreateInstance(
-            CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
-            IID_PPV_ARGS(&state.wicFactory)))) {
+    if (state.wicFactory == nullptr &&
+        FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(&state.wicFactory)))) {
         throw std::runtime_error("Nie mozna uruchomic obslugi miniatur.");
     }
     RECT client{};
     GetClientRect(window, &client);
-    if (FAILED(state.d2dFactory->CreateHwndRenderTarget(
-            D2D1::RenderTargetProperties(
-                D2D1_RENDER_TARGET_TYPE_DEFAULT,
-                D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN),
-                96.0F, 96.0F),
-            D2D1::HwndRenderTargetProperties(
-                window, D2D1::SizeU(client.right, client.bottom)),
-            &state.renderTarget))) {
-        throw std::runtime_error("Nie mozna utworzyc powierzchni interfejsu.");
+    if (offscreen != nullptr) {
+        if (FAILED(state.d2dFactory->CreateWicBitmapRenderTarget(
+                offscreen, D2D1::RenderTargetProperties(), &state.renderTarget))) {
+            throw std::runtime_error("Nie mozna utworzyc podgladu interfejsu.");
+        }
+    } else {
+        if (FAILED(state.d2dFactory->CreateHwndRenderTarget(
+                D2D1::RenderTargetProperties(
+                    D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                    D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN), 96.0F, 96.0F),
+                D2D1::HwndRenderTargetProperties(window, D2D1::SizeU(client.right, client.bottom)),
+                &state.windowRenderTarget))) {
+            throw std::runtime_error("Nie mozna utworzyc powierzchni interfejsu.");
+        }
+        state.renderTarget = state.windowRenderTarget;
     }
     state.renderTarget->CreateSolidColorBrush(white, &state.brush);
-    createTextFormat(state.writeFactory.Get(), L"Segoe UI Variable Display", 28,
+    createTextFormat(state.writeFactory.Get(), L"Segoe UI Variable Display", 32,
                      DWRITE_FONT_WEIGHT_SEMI_BOLD, state.titleFormat);
-    createTextFormat(state.writeFactory.Get(), L"Segoe UI Variable Text", 19,
+    createTextFormat(state.writeFactory.Get(), L"Segoe UI Variable Text", 18,
                      DWRITE_FONT_WEIGHT_SEMI_BOLD, state.headingFormat);
     createTextFormat(state.writeFactory.Get(), L"Segoe UI Variable Text", 14,
                      DWRITE_FONT_WEIGHT_NORMAL, state.bodyFormat);
@@ -1252,10 +1289,10 @@ void ensureGraphics(const HWND window, AppState& state) {
                      DWRITE_FONT_WEIGHT_BOLD, state.brandFormat);
 }
 
-[[nodiscard]] ID2D1Bitmap* thumbnailBitmap(
-    AppState& state, const std::wstring& key,
-    const std::vector<std::uint8_t>& encodedImage) {
-    if (encodedImage.empty() || encodedImage.size() > MAXDWORD) return nullptr;
+[[nodiscard]] ID2D1Bitmap *thumbnailBitmap(AppState &state, const std::wstring &key,
+                                           const std::vector<std::uint8_t> &encodedImage) {
+    if (encodedImage.empty() || encodedImage.size() > MAXDWORD)
+        return nullptr;
     if (const auto existing = state.thumbnailBitmaps.find(key);
         existing != state.thumbnailBitmaps.end()) {
         return existing->second.Get();
@@ -1320,54 +1357,6 @@ void drawGlow(AppState& state, const Rect rectangle, const float radius,
     }
 }
 
-void fillAccentGradient(AppState& state, const Rect rectangle, const float radius) {
-    const D2D1_GRADIENT_STOP stops[] = {
-        {0.0F, primary},
-        {1.0F, accentSecondary},
-    };
-    ComPtr<ID2D1GradientStopCollection> collection;
-    ComPtr<ID2D1LinearGradientBrush> gradient;
-    if (SUCCEEDED(state.renderTarget->CreateGradientStopCollection(
-            stops, static_cast<UINT32>(std::size(stops)), &collection)) &&
-        SUCCEEDED(state.renderTarget->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(
-                D2D1::Point2F(rectangle.left, rectangle.top),
-                D2D1::Point2F(rectangle.right, rectangle.bottom)),
-            collection.Get(), &gradient))) {
-        state.renderTarget->FillRoundedRectangle(
-            D2D1::RoundedRect(rectangle.d2d(), radius, radius), gradient.Get());
-    } else {
-        fillRounded(state, rectangle, radius, primary);
-    }
-}
-
-void drawAmbientGlow(AppState& state) {
-    const float time = static_cast<float>(GetTickCount64() % 20'000) / 1000.0F;
-    const float driftX = std::sin(time * 0.34F) * 24.0F;
-    const float driftY = std::cos(time * 0.27F) * 18.0F;
-    D2D1_COLOR_F ambientPrimary = primary;
-    ambientPrimary.a = 0.115F;
-    D2D1_COLOR_F ambientSecondary = accentSecondary;
-    ambientSecondary.a = 0.035F;
-    const D2D1_GRADIENT_STOP stops[] = {
-        {0.0F, ambientPrimary},
-        {0.52F, ambientSecondary},
-        {1.0F, D2D1_COLOR_F{0.0F, 0.0F, 0.0F, 0.0F}},
-    };
-    ComPtr<ID2D1GradientStopCollection> collection;
-    ComPtr<ID2D1RadialGradientBrush> gradient;
-    if (SUCCEEDED(state.renderTarget->CreateGradientStopCollection(
-            stops, static_cast<UINT32>(std::size(stops)), &collection)) &&
-        SUCCEEDED(state.renderTarget->CreateRadialGradientBrush(
-            D2D1::RadialGradientBrushProperties(
-                D2D1::Point2F(920 + driftX, 100 + driftY),
-                D2D1::Point2F(0, 0), 330, 260),
-            collection.Get(), &gradient))) {
-        state.renderTarget->FillEllipse(
-            D2D1::Ellipse(D2D1::Point2F(920 + driftX, 100 + driftY), 330, 260),
-            gradient.Get());
-    }
-}
 
 [[nodiscard]] float hoverValue(const AppState& state, const HitTarget target) {
     return state.hoverAnimation[static_cast<std::size_t>(target)];
@@ -1376,21 +1365,9 @@ void drawAmbientGlow(AppState& state) {
 void drawText(AppState& state, const std::wstring& text, const Rect rectangle,
               IDWriteTextFormat* format, const D2D1_COLOR_F color) {
     state.brush->SetColor(color);
-    D2D1_MATRIX_3X2_F previousTransform{};
-    state.renderTarget->GetTransform(&previousTransform);
-    Rect textRectangle = rectangle;
-    if (state.mainWindow != nullptr) {
-        const auto viewport = designViewport(state.mainWindow);
-        const float horizontalRatio = viewport.scaleX / viewport.scaleY;
-        textRectangle.left *= horizontalRatio;
-        textRectangle.right *= horizontalRatio;
-        state.renderTarget->SetTransform(D2D1::Matrix3x2F::Scale(
-            viewport.scaleY, viewport.scaleY));
-    }
     state.renderTarget->DrawTextW(
-        text.c_str(), static_cast<UINT32>(text.size()), format, textRectangle.d2d(),
+        text.c_str(), static_cast<UINT32>(text.size()), format, rectangle.d2d(),
         state.brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
-    state.renderTarget->SetTransform(previousTransform);
 }
 
 void drawCenteredText(AppState& state, const std::wstring& text, const Rect rectangle,
@@ -1469,7 +1446,6 @@ void drawToggle(AppState& state, const Rect rectangle, const float position) {
     track.r += (primary.r - track.r) * position;
     track.g += (primary.g - track.g) * position;
     track.b += (primary.b - track.b) * position;
-    if (position > 0.02F) drawGlow(state, rectangle, 11, primary, position * 0.55F);
     fillRounded(state, rectangle, 11, track);
     const float centerX = rectangle.left + 11 +
         (rectangle.right - rectangle.left - 22) * position;
@@ -1479,50 +1455,19 @@ void drawToggle(AppState& state, const Rect rectangle, const float position) {
         state.brush.Get());
 }
 
-void drawCheckbox(AppState& state, const Rect rectangle, const bool checked) {
-    const Rect box = fixedAspectRect(state.mainWindow, rectangle);
-    const auto viewport = designViewport(state.mainWindow);
-    const float xCorrection = viewport.scaleY / viewport.scaleX;
-    if (checked) {
-        for (int layer = 4; layer >= 1; --layer) {
-            const float spreadY = static_cast<float>(layer) * 2.0F;
-            const float spreadX = spreadY * xCorrection;
-            D2D1_COLOR_F glow = primary;
-            glow.a = 0.22F * (0.025F + static_cast<float>(5 - layer) * 0.014F);
-            state.brush->SetColor(glow);
-            state.renderTarget->DrawRoundedRectangle(
-                D2D1::RoundedRect(
-                    D2D1::RectF(box.left - spreadX, box.top - spreadY,
-                                box.right + spreadX, box.bottom + spreadY),
-                    (5.0F + spreadY) * xCorrection, 5.0F + spreadY),
-                state.brush.Get(), static_cast<float>(layer) * 1.6F);
-        }
-    }
-    state.brush->SetColor(checked ? primary : field);
-    state.renderTarget->FillRoundedRectangle(
-        D2D1::RoundedRect(box.d2d(), 5.0F * xCorrection, 5.0F),
-        state.brush.Get());
-    if (!checked) {
-        state.brush->SetColor(border);
-        state.renderTarget->DrawRoundedRectangle(
-            D2D1::RoundedRect(box.d2d(), 5.0F * xCorrection, 5.0F),
-            state.brush.Get());
+void drawCheckbox(AppState &state, const Rect r, const bool checked) {
+    fillRounded(state, r, 4, checked ? primary : background);
+    strokeRounded(state, r, 4, checked ? primary : muted);
+    if (!checked)
         return;
-    }
-    const float width = box.right - box.left;
-    const float height = box.bottom - box.top;
     state.brush->SetColor(white);
-    state.renderTarget->DrawLine(
-        D2D1::Point2F(box.left + width * 0.25F, box.top + height * 0.50F),
-        D2D1::Point2F(box.left + width * 0.45F, box.top + height * 0.70F),
-        state.brush.Get(), 2.0F);
-    state.renderTarget->DrawLine(
-        D2D1::Point2F(box.left + width * 0.45F, box.top + height * 0.70F),
-        D2D1::Point2F(box.left + width * 0.80F, box.top + height * 0.30F),
-        state.brush.Get(), 2.0F);
+    state.renderTarget->DrawLine({r.left + 5, r.top + 10}, {r.left + 9, r.top + 14},
+                                 state.brush.Get(), 1.6F);
+    state.renderTarget->DrawLine({r.left + 9, r.top + 14}, {r.left + 15, r.top + 6},
+                                 state.brush.Get(), 1.6F);
 }
 
-void drawButton(AppState& state, const Rect rectangle, const std::wstring& label,
+void drawButton(AppState &state, const Rect rectangle, const std::wstring &label,
                 const HitTarget target, const bool emphasized, const bool enabled = true) {
     const float hover = hoverValue(state, target);
     D2D1_COLOR_F color = emphasized ? primary : field;
@@ -1532,342 +1477,372 @@ void drawButton(AppState& state, const Rect rectangle, const std::wstring& label
         color.g += (destination.g - color.g) * hover;
         color.b += (destination.b - color.b) * hover;
     }
-    if (!enabled) color.a = 0.42F;
-    if (enabled && (emphasized || hover > 0.01F)) {
-        drawGlow(state, rectangle, 10, emphasized ? primary : accentSecondary,
-                 (emphasized ? 0.30F : 0.0F) + hover * 0.75F);
-    }
-    if (emphasized && enabled) fillAccentGradient(state, rectangle, 10);
-    else fillRounded(state, rectangle, 10, color);
-    if (!emphasized) strokeRounded(state, rectangle, 10, border);
+    if (!enabled)
+        color.a = 0.42F;
+    fillRounded(state, rectangle, 6, color);
+    if (!emphasized)
+        strokeRounded(state, rectangle, 6, border);
     D2D1_COLOR_F textColor = white;
-    if (!enabled) textColor.a = 0.42F;
+    if (emphasized && enabled &&
+        primary.r * 0.2126F + primary.g * 0.7152F + primary.b * 0.0722F > 0.62F) {
+        textColor = background;
+    }
+    if (!enabled)
+        textColor.a = 0.42F;
     drawCenteredText(state, label, rectangle, state.buttonFormat.Get(), textColor);
 }
 
-void drawFullscreenIconButton(AppState& state) {
-    drawButton(state, editorFullscreenRect, L"",
-               HitTarget::editorFullscreen, false);
-    const float left = editorFullscreenRect.left + 14;
-    const float top = editorFullscreenRect.top + 11;
-    const float right = editorFullscreenRect.right - 14;
-    const float bottom = editorFullscreenRect.bottom - 11;
-    constexpr float arm = 6.0F;
-    state.brush->SetColor(white);
-    const auto corner = [&](const float x, const float y,
-                            const float horizontal, const float vertical) {
-        state.renderTarget->DrawLine(
-            D2D1::Point2F(x, y), D2D1::Point2F(x + horizontal * arm, y),
-            state.brush.Get(), 1.8F);
-        state.renderTarget->DrawLine(
-            D2D1::Point2F(x, y), D2D1::Point2F(x, y + vertical * arm),
-            state.brush.Get(), 1.8F);
+enum class Icon {
+    record,
+    clips,
+    settings,
+    folder,
+    play,
+    pause,
+    back,
+    monitor,
+    expand,
+    edit,
+    copy,
+    trash
+};
+void drawIcon(AppState &state, Icon icon, float x, float y, D2D1_COLOR_F color, float size = 20) {
+    state.brush->SetColor(color);
+    const float u = size / 20;
+    const auto line = [&](float a, float b, float c, float d) {
+        state.renderTarget->DrawLine({x + a * u, y + b * u}, {x + c * u, y + d * u},
+                                     state.brush.Get(), 1.5F);
     };
-    corner(left, top, 1, 1);
-    corner(right, top, -1, 1);
-    corner(left, bottom, 1, -1);
-    corner(right, bottom, -1, -1);
+    const auto box = [&](float a, float b, float c, float d, float r = 2) {
+        state.renderTarget->DrawRoundedRectangle(
+            D2D1::RoundedRect(D2D1::RectF(x + a * u, y + b * u, x + c * u, y + d * u), r, r),
+            state.brush.Get(), 1.4F);
+    };
+    switch (icon) {
+    case Icon::record:
+        state.renderTarget->DrawEllipse(D2D1::Ellipse({x + 10 * u, y + 10 * u}, 8 * u, 8 * u),
+                                        state.brush.Get(), 1.5F);
+        state.renderTarget->FillEllipse(D2D1::Ellipse({x + 10 * u, y + 10 * u}, 3 * u, 3 * u),
+                                        state.brush.Get());
+        break;
+    case Icon::clips:
+        box(2, 2, 8, 8, 1);
+        box(12, 2, 18, 8, 1);
+        box(2, 12, 8, 18, 1);
+        box(12, 12, 18, 18, 1);
+        break;
+    case Icon::settings:
+        line(3, 5, 17, 5);
+        line(3, 15, 17, 15);
+        box(6, 2, 10, 8, 1);
+        box(11, 12, 15, 18, 1);
+        break;
+    case Icon::folder:
+        box(2, 6, 18, 17);
+        line(2, 6, 2, 3);
+        line(2, 3, 8, 3);
+        line(8, 3, 11, 6);
+        break;
+    case Icon::play:
+        line(6, 3, 16, 10);
+        line(16, 10, 6, 17);
+        line(6, 17, 6, 3);
+        break;
+    case Icon::pause:
+        line(6, 4, 6, 16);
+        line(14, 4, 14, 16);
+        break;
+    case Icon::back:
+        line(15, 10, 4, 10);
+        line(4, 10, 9, 5);
+        line(4, 10, 9, 15);
+        break;
+    case Icon::monitor:
+        box(2, 3, 18, 14);
+        line(10, 14, 10, 18);
+        line(6, 18, 14, 18);
+        break;
+    case Icon::expand:
+        line(2, 7, 2, 2);
+        line(2, 2, 7, 2);
+        line(13, 2, 18, 2);
+        line(18, 2, 18, 7);
+        line(18, 13, 18, 18);
+        line(18, 18, 13, 18);
+        line(7, 18, 2, 18);
+        line(2, 18, 2, 13);
+        break;
+    case Icon::edit:
+        line(3, 13, 13, 3);
+        line(13, 3, 17, 7);
+        line(17, 7, 7, 17);
+        line(7, 17, 3, 17);
+        line(3, 17, 3, 13);
+        line(11, 5, 15, 9);
+        break;
+    case Icon::copy:
+        box(6, 6, 17, 18, 1);
+        line(3, 14, 3, 2);
+        line(3, 2, 14, 2);
+        break;
+    case Icon::trash:
+        line(3, 5, 17, 5);
+        line(7, 5, 7, 2);
+        line(7, 2, 13, 2);
+        line(13, 2, 13, 5);
+        line(5, 7, 6, 18);
+        line(6, 18, 14, 18);
+        line(14, 18, 15, 7);
+        line(8, 8, 8, 15);
+        line(12, 8, 12, 15);
+        break;
+    }
 }
-
-void drawSidebar(AppState& state) {
-    state.brush->SetColor(sidebar);
-    state.renderTarget->FillRectangle(D2D1::RectF(0, 0, 220, windowHeight), state.brush.Get());
-    drawGlow(state, {20, 20, 58, 58}, 11, primary, 0.5F);
-    fillAccentGradient(state, {20, 20, 58, 58}, 11);
-    drawCenteredText(state, L"N", {20, 19, 58, 58}, state.brandFormat.Get(), white);
-    drawText(state, L"NexPlay", {70, 25, 190, 54}, state.brandFormat.Get(), white);
-    drawText(state, L"REPLAY ENGINE", {20, 83, 190, 104}, state.smallFormat.Get(), muted);
-
-    const auto drawNav = [&](const Rect rectangle, const Page page,
-                             const wchar_t* icon, const wchar_t* label) {
-        const bool active = state.page == page ||
-            (page == Page::clips && state.page == Page::editor);
-        const HitTarget target = page == Page::replay ? HitTarget::replayPage :
-            (page == Page::clips ? HitTarget::clipsPage : HitTarget::settingsPage);
+void rule(AppState &state, float x, float y, float right) {
+    state.brush->SetColor(border);
+    state.renderTarget->DrawLine({x, y}, {right, y}, state.brush.Get(), 1);
+}
+void panel(AppState &state, Rect rect) {
+    fillRounded(state, rect, 10, card);
+    strokeRounded(state, rect, 10, border);
+}
+void pageHeader(AppState &state, const std::wstring &title, const std::wstring &detail) {
+    drawText(state, title, {contentLeft, 80, contentRight - 190, 121}, state.titleFormat.Get(),
+             white);
+    drawText(state, detail, {contentLeft, 127, contentRight - 160, 149}, state.bodyFormat.Get(),
+             muted);
+}
+void drawSidebar(AppState &state) {
+    fillRounded(state, {0, 44, 208, windowHeight}, 0, sidebar);
+    state.brush->SetColor(border);
+    state.renderTarget->DrawLine({208, 44}, {208, windowHeight}, state.brush.Get());
+    drawText(state, L"PRZESTRZEŃ ROBOCZA", {24, 87, 200, 107}, state.smallFormat.Get(), muted);
+    const auto nav = [&](Rect r, Page page, HitTarget target, Icon icon, const wchar_t *label) {
+        const bool active =
+            state.page == page || (page == Page::clips && state.page == Page::editor);
         const float hover = hoverValue(state, target);
         if (active || hover > 0.01F) {
-            D2D1_COLOR_F navColor = active ? primary : field;
-            if (active) {
-                navColor.r *= 0.20F;
-                navColor.g *= 0.20F;
-                navColor.b *= 0.20F;
-            }
-            if (!active) navColor.a = hover;
-            fillRounded(state, rectangle, 10,
-                        navColor);
+            auto fill = active ? field : card;
+            fill.a = active ? 1 : hover;
+            fillRounded(state, r, 8, fill);
         }
-        if (active) {
-            drawGlow(state,
-                      {rectangle.left, rectangle.top + 11, rectangle.left + 3, rectangle.bottom - 11},
-                      2, primary, 0.8F);
-            fillRounded(state,
-                        {rectangle.left, rectangle.top + 11, rectangle.left + 3, rectangle.bottom - 11},
-                        2, primary);
-        }
-        drawText(state, icon,
-                 {rectangle.left + 18, rectangle.top + 13, rectangle.left + 42, rectangle.bottom},
-                 state.bodyFormat.Get(), active ? primaryHover : muted);
-        drawText(state, label,
-                 {rectangle.left + 50, rectangle.top + 13, rectangle.right, rectangle.bottom},
+        drawIcon(state, icon, r.left + 16, r.top + 13, active ? primaryHover : muted);
+        drawText(state, label, {r.left + 50, r.top + 14, r.right - 10, r.bottom},
                  state.bodyFormat.Get(), active ? white : muted);
+        if (active)
+            fillRounded(state, {r.right - 8, r.top + 16, r.right - 5, r.bottom - 16}, 1.5F,
+                        primary);
     };
-    drawNav(replayNavRect, Page::replay, L"●", L"Nagrywanie");
-    drawNav(clipsNavRect, Page::clips, L"▰", L"Biblioteka klipów");
-    drawNav(settingsNavRect, Page::settings, L"⚙", L"Ustawienia");
-
-    drawText(state, L"SKRÓTY", {20, 644, 190, 666}, state.smallFormat.Get(), muted);
-    fillRounded(state, {20, 680, 122, 710}, 7, field);
-    drawCenteredText(state, hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk),
-                     {20, 680, 122, 710}, state.smallFormat.Get(), white);
-    drawText(state, L"Zapisz", {132, 686, 204, 710}, state.smallFormat.Get(), muted);
-    fillRounded(state, {20, 722, 122, 752}, 7, field);
-    drawCenteredText(state, hotkeyLabel(state.stopHotkeyModifiers, state.stopHotkeyVk),
-                     {20, 722, 122, 752}, state.smallFormat.Get(), white);
-    drawText(state, L"Stop", {132, 728, 204, 752}, state.smallFormat.Get(), muted);
+    nav(replayNavRect, Page::replay, HitTarget::replayPage, Icon::record, L"Nagrywanie");
+    nav(clipsNavRect, Page::clips, HitTarget::clipsPage, Icon::clips, L"Biblioteka");
+    nav(settingsNavRect, Page::settings, HitTarget::settingsPage, Icon::settings, L"Ustawienia");
+    rule(state, 20, windowHeight - 178, 188);
+    drawText(state, L"SZYBKI DOSTĘP", {24, windowHeight - 158, 194, windowHeight - 138},
+             state.smallFormat.Get(), muted);
+    const auto shortcut = [&](float y, const std::wstring &key, const wchar_t *label) {
+        drawText(state, label, {24, y + 7, 96, y + 30}, state.smallFormat.Get(), muted);
+        fillRounded(state, {102, y, 188, y + 30}, 5, field);
+        drawCenteredText(state, key, {102, y, 188, y + 30}, state.smallFormat.Get(), white);
+    };
+    shortcut(windowHeight - 123, hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk),
+             L"Zapis klipu");
+    shortcut(windowHeight - 81, hotkeyLabel(state.stopHotkeyModifiers, state.stopHotkeyVk),
+             L"Zatrzymaj");
 }
 
-void drawTitlebar(AppState& state) {
-    const float minimizeHover = hoverValue(state, HitTarget::minimize);
-    const float maximizeHover = hoverValue(state, HitTarget::maximize);
-    const float closeHover = hoverValue(state, HitTarget::close);
-    if (minimizeHover > 0.01F) {
-        D2D1_COLOR_F hoverColor = field;
-        hoverColor.a = minimizeHover;
-        fillRounded(state, minimizeRect, 8, hoverColor);
+void drawTitlebar(AppState &state) {
+    fillRounded(state, {0, 0, windowWidth, 44}, 0, sidebar);
+    rule(state, 0, 44, windowWidth);
+    fillRounded(state, {17, 12, 37, 32}, 5, primary);
+    drawCenteredText(state, L"N", {17, 11, 37, 32}, state.buttonFormat.Get(), white);
+    drawText(state, L"NexPlay", {48, 13, 152, 36}, state.buttonFormat.Get(), white);
+    drawText(state, L"/  STUDIO", {148, 14, 280, 35}, state.smallFormat.Get(), muted);
+    for (auto target : {HitTarget::minimize, HitTarget::maximize, HitTarget::close}) {
+        Rect r = target == HitTarget::minimize
+                     ? minimizeRect
+                     : (target == HitTarget::maximize ? maximizeRect : closeRect);
+        float hover = hoverValue(state, target);
+        auto color = target == HitTarget::close ? red : field;
+        color.a = hover;
+        if (hover > 0.01F)
+            fillRounded(state, r, 0, color);
+        const float x = (r.left + r.right) * 0.5F, y = 22;
+        state.brush->SetColor(hover > 0.4F ? white : muted);
+        auto line = [&](float a, float b, float c, float d) {
+            state.renderTarget->DrawLine({a, b}, {c, d}, state.brush.Get(), 1);
+        };
+        if (target == HitTarget::minimize)
+            line(x - 5, y, x + 5, y);
+        else if (target == HitTarget::close) {
+            line(x - 4, y - 4, x + 4, y + 4);
+            line(x + 4, y - 4, x - 4, y + 4);
+        } else {
+            if (IsZoomed(state.mainWindow)) {
+                line(x - 2, y - 6, x + 6, y - 6);
+                line(x + 6, y - 6, x + 6, y + 2);
+                state.renderTarget->DrawRectangle(D2D1::RectF(x - 5, y - 3, x + 3, y + 5),
+                                                  state.brush.Get());
+            } else
+                state.renderTarget->DrawRectangle(D2D1::RectF(x - 5, y - 5, x + 5, y + 5),
+                                                  state.brush.Get());
+        }
     }
-    drawCenteredText(state, L"—", minimizeRect, state.headingFormat.Get(),
-                     minimizeHover > 0.4F ? white : muted);
-    if (maximizeHover > 0.01F) {
-        D2D1_COLOR_F hoverColor = field;
-        hoverColor.a = maximizeHover;
-        fillRounded(state, maximizeRect, 8, hoverColor);
-    }
-    drawCenteredText(state, IsZoomed(state.mainWindow) ? L"❐" : L"□",
-                     maximizeRect, state.bodyFormat.Get(),
-                     maximizeHover > 0.4F ? white : muted);
-    if (closeHover > 0.01F) {
-        D2D1_COLOR_F closeColor = red;
-        closeColor.a = closeHover;
-        fillRounded(state, closeRect, 8, closeColor);
-    }
-    drawCenteredText(state, L"×", closeRect, state.headingFormat.Get(),
-                     closeHover > 0.4F ? white : muted);
 }
 
-void drawStatusChip(AppState& state) {
+void drawStatusChip(AppState &state) {
     const bool running = state.engine.isRunning();
-    const Rect chip{914, 92, 1060, 126};
-    const float pulse = running
-        ? 0.5F + 0.5F * std::sin(static_cast<float>(GetTickCount64() % 4'000) / 4'000.0F * 6.283185F)
-        : 0.0F;
-    if (running) drawGlow(state, chip, 17, green, 0.15F + pulse * 0.18F);
-    fillRounded(state, chip, 17,
-                running ? D2D1_COLOR_F{0.018F, 0.100F, 0.073F, 1} : field);
+    const Rect r{contentRight - 154, 98, contentRight, 130};
+    fillRounded(state, r, 16, card);
+    strokeRounded(state, r, 16, border);
     state.brush->SetColor(running ? green : muted);
-    if (running) {
-        D2D1_COLOR_F dotGlow = green;
-        dotGlow.a = 0.16F + pulse * 0.18F;
-        state.brush->SetColor(dotGlow);
-        state.renderTarget->FillEllipse(
-            D2D1::Ellipse(D2D1::Point2F(935, 109), 8 + pulse * 2, 8 + pulse * 2),
-            state.brush.Get());
-        state.brush->SetColor(green);
-    }
-    state.renderTarget->FillEllipse(
-        D2D1::Ellipse(D2D1::Point2F(935, 109), 3.5F, 3.5F), state.brush.Get());
-    drawText(state, running ? L"BUFOR AKTYWNY" : L"GOTOWY",
-             {947, 100, 1052, 124}, state.smallFormat.Get(), running ? green : muted);
+    state.renderTarget->FillEllipse(D2D1::Ellipse({r.left + 17, 114}, 3, 3), state.brush.Get());
+    drawText(state, running ? L"Bufor aktywny" : L"Bufor wyłączony",
+             {r.left + 29, 106, r.right - 8, 127}, state.smallFormat.Get(),
+             running ? green : muted);
 }
 
-void drawAudioGroupSelector(
-    AppState& state, const Rect rectangle, const bool selected, const bool enabled) {
+void drawAudioGroupSelector(AppState &state, const Rect rectangle, const bool selected,
+                            const bool enabled) {
     D2D1_COLOR_F selectorColor = selected ? primary : field;
-    if (!enabled) selectorColor.a = 0.36F;
-    if (selected && enabled) drawGlow(state, rectangle, 7, primary, 0.34F);
+    if (!enabled)
+        selectorColor.a = 0.36F;
+    if (selected && enabled)
+        drawGlow(state, rectangle, 7, primary, 0.34F);
     fillRounded(state, rectangle, 7, selectorColor);
     strokeRounded(state, rectangle, 7, selected ? primaryHover : border);
 
     D2D1_COLOR_F iconColor = selected ? white : muted;
-    if (!enabled) iconColor.a = 0.34F;
+    if (!enabled)
+        iconColor.a = 0.34F;
     state.brush->SetColor(iconColor);
     state.renderTarget->DrawRoundedRectangle(
-        D2D1::RoundedRect(
-            D2D1::RectF(rectangle.left + 4, rectangle.top + 7,
-                        rectangle.left + 12, rectangle.bottom - 5), 4, 4),
+        D2D1::RoundedRect(D2D1::RectF(rectangle.left + 4, rectangle.top + 7, rectangle.left + 12,
+                                      rectangle.bottom - 5),
+                          4, 4),
         state.brush.Get(), 1.4F);
     state.renderTarget->DrawRoundedRectangle(
-        D2D1::RoundedRect(
-            D2D1::RectF(rectangle.right - 12, rectangle.top + 5,
-                        rectangle.right - 4, rectangle.bottom - 7), 4, 4),
+        D2D1::RoundedRect(D2D1::RectF(rectangle.right - 12, rectangle.top + 5, rectangle.right - 4,
+                                      rectangle.bottom - 7),
+                          4, 4),
         state.brush.Get(), 1.4F);
-    state.renderTarget->DrawLine(
-        D2D1::Point2F(rectangle.left + 10, rectangle.bottom - 7),
-        D2D1::Point2F(rectangle.right - 10, rectangle.top + 7),
-        state.brush.Get(), 1.4F);
+    state.renderTarget->DrawLine(D2D1::Point2F(rectangle.left + 10, rectangle.bottom - 7),
+                                 D2D1::Point2F(rectangle.right - 10, rectangle.top + 7),
+                                 state.brush.Get(), 1.4F);
 }
 
-void drawAudioGroupDialog(AppState& state) {
-    if (!state.audioGroupDialogOpen) return;
-    state.brush->SetColor(D2D1_COLOR_F{0, 0, 0, 0.78F});
-    state.renderTarget->FillRectangle(
-        D2D1::RectF(220, 64, windowWidth, windowHeight), state.brush.Get());
-
-    drawGlow(state, audioGroupDialogRect, 18, primary, 0.42F);
-    fillRounded(state, audioGroupDialogRect, 18,
-                D2D1_COLOR_F{0.018F, 0.019F, 0.028F, 1});
-    D2D1_COLOR_F dialogBorder = primary;
-    dialogBorder.a = 0.34F;
-    strokeRounded(state, audioGroupDialogRect, 18, dialogBorder);
-    drawText(state, L"Nowa grupa audio", {444, 282, 780, 316},
-             state.headingFormat.Get(), white);
-    drawText(state,
-             L"Wybrane aplikacje zostaną zmiksowane do jednej ścieżki o tej nazwie.",
-             {444, 317, 876, 342}, state.smallFormat.Get(), muted);
-
-    fillRounded(state, audioGroupNameRect, 10, field);
-    strokeRounded(state, audioGroupNameRect, 10,
-                  state.activeField == HitTarget::audioGroupName ? primary : border);
-    if (state.activeField == HitTarget::audioGroupName) {
-        drawGlow(state, audioGroupNameRect, 10, primary, 0.46F);
-    }
-    const std::wstring shown = state.audioGroupName.empty()
-        ? L"np. FiveM" : state.audioGroupName;
-    drawText(state, shown,
-             {audioGroupNameRect.left + 14, audioGroupNameRect.top + 13,
-              audioGroupNameRect.right - 14, audioGroupNameRect.bottom - 8},
-             state.bodyFormat.Get(), state.audioGroupName.empty() ? muted : white);
-    drawText(state, L"NAZWA ŚCIEŻKI", {audioGroupNameRect.left, 327,
-                                       audioGroupNameRect.right, 349},
-             state.smallFormat.Get(), muted);
-
-    drawButton(state, cancelAudioGroupRect, L"Anuluj",
-               HitTarget::cancelAudioGroup, false);
-    drawButton(state, confirmAudioGroupRect, L"Utwórz grupę",
-               HitTarget::confirmAudioGroup, true,
+void drawAudioGroupDialog(AppState &state) {
+    if (!state.audioGroupDialogOpen)
+        return;
+    fillRounded(state, {0, 44, windowWidth, windowHeight}, 0, {0, 0, 0, 0.65F});
+    panel(state, audioGroupDialogRect);
+    const float x = audioGroupDialogRect.left + 32, y = audioGroupDialogRect.top;
+    drawText(state, L"Nowa grupa audio", {x, y + 24, x + 420, y + 56}, state.headingFormat.Get(),
+             white);
+    drawText(state, L"Wybrane aplikacje zapiszą się jako jedna nazwana ścieżka.",
+             {x, y + 62, x + 448, y + 86}, state.smallFormat.Get(), muted);
+    fillRounded(state, audioGroupNameRect, 6, field);
+    strokeRounded(state, audioGroupNameRect, 6, primary);
+    drawText(
+        state, state.audioGroupName.empty() ? L"Nazwa grupy" : state.audioGroupName,
+        {audioGroupNameRect.left + 12, audioGroupNameRect.top + 13,
+         audioGroupNameRect.right - 12, audioGroupNameRect.bottom},
+        state.bodyFormat.Get(), white);
+    drawButton(state, cancelAudioGroupRect, L"Anuluj", HitTarget::cancelAudioGroup, false);
+    drawButton(state, confirmAudioGroupRect, L"Utwórz grupę", HitTarget::confirmAudioGroup, true,
                validAudioGroupName(state.audioGroupName));
 }
 
-void drawReplayPage(AppState& state) {
+void drawReplayPage(AppState &state) {
     const bool running = state.engine.isRunning();
-    const auto& resolution = resolutionPresets[state.resolutionPreset];
-    const std::wstring resolutionDescription = resolution.width == 0
-        ? L"Natywna (" + std::to_wstring(GetSystemMetrics(SM_CXSCREEN)) + L" × " +
-              std::to_wstring(GetSystemMetrics(SM_CYSCREEN)) + L")"
-        : std::wstring(resolution.label);
-    drawText(state, L"Instant Replay", {260, 88, 600, 128}, state.titleFormat.Get(), white);
-    drawText(state, L"Nagrywaj w tle i zachowuj najlepsze momenty.",
-             {260, 126, 730, 150}, state.bodyFormat.Get(), muted);
+    pageHeader(state, L"Nagrywanie", L"Twoje najlepsze momenty, zawsze pod ręką.");
     drawStatusChip(state);
-
-    fillRounded(state, {260, 166, 1060, 282}, 16, card);
-    strokeRounded(state, {260, 166, 1060, 282}, 16, D2D1_COLOR_F{0.080F, 0.082F, 0.115F, 1});
-    drawText(state, L"Sterowanie buforem", {284, 184, 520, 214}, state.headingFormat.Get(), white);
+    panel(state, replayHeroRect);
+    panel(state, qualityPanelRect);
+    panel(state, audioPanelRect);
+    const float x = contentLeft + 24;
+    drawIcon(state, Icon::monitor, x, 190, muted);
+    drawText(state, L"MONITOR GŁÓWNY", {x + 30, 193, replayHeroRect.right - 24, 217},
+             state.smallFormat.Get(), muted);
+    drawText(state, running ? L"Jesteś w grze." : L"Gotowy na kolejny moment.",
+             {x, 231, replayHeroRect.right - 20, 275}, state.headingFormat.Get(), white);
+    drawText(state, L"Ostatnie " + state.durationText + L" s zapiszesz jednym skrótem.",
+             {x, 270, replayHeroRect.right - 20, 297}, state.bodyFormat.Get(), muted);
     drawButton(state, startRect, running ? L"Zatrzymaj bufor" : L"Uruchom bufor",
                HitTarget::startStop, true);
-    drawButton(state, saveRect,
-               L"Zapisz klip  ·  " + hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk),
-               HitTarget::save, false, running);
-    drawText(state, state.status, {674, 231, 1034, 254}, state.smallFormat.Get(),
-             state.status.starts_with(L"Błąd") ? red : muted);
-
-    fillRounded(state, {260, 298, 1060, 474}, 16, card);
-    strokeRounded(state, {260, 298, 1060, 474}, 16, D2D1_COLOR_F{0.080F, 0.082F, 0.115F, 1});
-    drawText(state, L"Jakość nagrywania", {284, 318, 540, 346}, state.headingFormat.Get(), white);
-    drawText(state, L"Główny monitor  •  NVENC H.264  •  skalowanie na GPU  •  do 8K",
-             {284, 348, 830, 370}, state.smallFormat.Get(), muted);
-    fillRounded(state, durationFieldRect, 10, field);
-    fillRounded(state, resolutionFieldRect, 10, field);
-    fillRounded(state, fpsFieldRect, 10, field);
-    fillRounded(state, bitrateFieldRect, 10, field);
-    strokeRounded(state, durationFieldRect, 10,
-                  state.activeField == HitTarget::durationField ? primary : border);
-    strokeRounded(state, resolutionFieldRect, 10,
-                  state.hover == HitTarget::resolutionField ? primary : border);
-    strokeRounded(state, fpsFieldRect, 10,
-                  state.activeField == HitTarget::fpsField ? primary : border);
-    strokeRounded(state, bitrateFieldRect, 10,
-                  state.activeField == HitTarget::bitrateField ? primary : border);
-    if (state.activeField == HitTarget::durationField) drawGlow(state, durationFieldRect, 10, primary, 0.75F);
-    if (state.hover == HitTarget::resolutionField) drawGlow(state, resolutionFieldRect, 10, primary, 0.35F);
-    if (state.activeField == HitTarget::fpsField) drawGlow(state, fpsFieldRect, 10, primary, 0.75F);
-    if (state.activeField == HitTarget::bitrateField) drawGlow(state, bitrateFieldRect, 10, primary, 0.75F);
-    drawText(state, L"DŁUGOŚĆ BUFORA", {298, 380, 464, 402}, state.smallFormat.Get(), muted);
-    drawText(state, L"ROZDZIELCZOŚĆ", {492, 380, 680, 402}, state.smallFormat.Get(), muted);
-    drawText(state, L"FPS", {708, 380, 824, 402}, state.smallFormat.Get(), muted);
-    drawText(state, L"BITRATE (Mb/s)", {852, 380, 1036, 402}, state.smallFormat.Get(), muted);
-    drawNumericValue(state, state.durationText, {302, 411, 420, 450}, HitTarget::durationField);
-    drawCenteredText(state, resolutionDescription, {486, 407, 672, 453},
-                     state.buttonFormat.Get(), white);
-    drawNumericValue(state, state.fpsText, {706, 411, 780, 450}, HitTarget::fpsField);
-    drawNumericValue(state, state.bitrateText, {850, 411, 990, 450}, HitTarget::bitrateField);
-    drawText(state, L"sek.", {420, 422, 458, 448}, state.smallFormat.Get(), muted);
-    drawText(state, L"kl./s", {780, 422, 818, 448}, state.smallFormat.Get(), muted);
-
-    fillRounded(state, {260, 490, 1060, 770}, 16, card);
-    strokeRounded(state, {260, 490, 1060, 770}, 16, D2D1_COLOR_F{0.080F, 0.082F, 0.115F, 1});
-    drawText(state, L"Źródła audio", {284, 509, 520, 537}, state.headingFormat.Get(), white);
-    drawText(state, L"Zaznacz ogniwa przy aplikacjach, aby połączyć je w jedną ścieżkę.",
-             {284, 539, 754, 561}, state.smallFormat.Get(), muted);
-    const std::size_t selectedForGroup = selectedAudioRowCount(state);
-    const std::wstring existingGroup = selectedExistingAudioGroup(state);
-    const std::wstring groupButtonLabel = !existingGroup.empty()
-        ? L"Rozłącz" : L"Połącz (" + std::to_wstring(selectedForGroup) + L")";
-    drawButton(state, createAudioGroupRect, groupButtonLabel,
-               HitTarget::createAudioGroup, false,
-               !running && selectedForGroup >= 2);
-    drawText(state, L"Mikrofon", {774, 516, 846, 538}, state.smallFormat.Get(),
-             running ? muted : white);
-    drawToggle(state, {898, 514, 938, 536}, state.microphoneAnimation);
+    drawButton(state, saveRect, L"Zapisz klip", HitTarget::save, false, running);
+    // Capture settings form: fixed control height, flexible panel position.
+    const float q = qualityPanelRect.left + 20;
+    drawText(state, L"Jakość nagrania", {q, 188, contentRight - 20, 218}, state.headingFormat.Get(),
+             white);
+    drawText(state, L"NVENC  /  H.264  /  do 8K", {q, 223, contentRight - 20, 246},
+             state.smallFormat.Get(), muted);
+    const auto value = [&](Rect r, const wchar_t *label, const std::wstring &text, HitTarget target,
+                           const wchar_t *unit) {
+        drawText(state, label, {r.left, r.top - 20, r.right, r.top}, state.smallFormat.Get(),
+                 muted);
+        fillRounded(state, r, 6, field);
+        strokeRounded(state, r, 6, state.activeField == target ? primary : border);
+        drawNumericValue(state, text, {r.left + 10, r.top + 3, r.right - 38, r.bottom - 3}, target);
+        drawText(state, unit, {r.right - 36, r.top + 16, r.right - 5, r.bottom},
+                 state.smallFormat.Get(), muted);
+    };
+    value(durationFieldRect, L"Bufor", state.durationText, HitTarget::durationField, L"s");
+    value(fpsFieldRect, L"Klatki / sekundę", state.fpsText, HitTarget::fpsField, L"fps");
+    value(bitrateFieldRect, L"Bitrate", state.bitrateText, HitTarget::bitrateField, L"Mb/s");
+    drawText(state, L"Rozdzielczość",
+             {resolutionFieldRect.left, 326, resolutionFieldRect.right, 346},
+             state.smallFormat.Get(), muted);
+    drawButton(state, resolutionFieldRect, resolutionPresets[state.resolutionPreset].label,
+               HitTarget::resolutionField, false, !running);
+    drawText(state, L"Źródła audio", {x, 453, contentRight - 380, 485}, state.headingFormat.Get(),
+             white);
+    drawText(state, L"Każda aplikacja jako osobna ścieżka. Wybierz ogniwa, aby utworzyć grupę.",
+             {x, 495, contentRight - 20, 520}, state.smallFormat.Get(), muted);
+    const auto selected = selectedAudioRowCount(state);
+    drawButton(state, createAudioGroupRect,
+               selectedExistingAudioGroup(state).empty()
+                   ? L"Połącz (" + std::to_wstring(selected) + L")"
+                   : L"Rozłącz",
+               HitTarget::createAudioGroup, false, !running && selected >= 2);
+    drawText(state, L"Mikrofon",
+             {microphoneRect.left, microphoneRect.top + 10, microphoneRect.right - 50,
+              microphoneRect.bottom},
+             state.smallFormat.Get(), white);
+    drawToggle(state,
+               {microphoneRect.right - 40, microphoneRect.top + 7, microphoneRect.right,
+                microphoneRect.top + 29},
+               state.microphoneAnimation);
     drawButton(state, refreshRect, L"Odśwież", HitTarget::refreshAudio, false, !running);
-
-    constexpr int visibleRows = 5;
-    constexpr float rowHeight = 36.0F;
-    state.audioScroll = std::clamp(
-        state.audioScroll, 0,
-        std::max(0, static_cast<int>(state.audioRows.size()) - visibleRows));
-    for (int visible = 0; visible < visibleRows; ++visible) {
-        const int index = visible + state.audioScroll;
-        if (index >= static_cast<int>(state.audioRows.size())) break;
-        const float top = 574 + visible * rowHeight;
-        const auto& row = state.audioRows[static_cast<std::size_t>(index)];
-        const bool rowHovered = state.mouseX >= 280 && state.mouseX <= 1038 &&
-            state.mouseY >= top && state.mouseY <= top + 32 && !running;
-        if (visible % 2 == 0 || rowHovered) {
-            fillRounded(state, {280, top, 1038, top + 32}, 7,
-                        rowHovered ? D2D1_COLOR_F{0.070F, 0.058F, 0.125F, 1}
-                                   : D2D1_COLOR_F{0.036F, 0.038F, 0.053F, 1});
-        }
-        drawCheckbox(state, {294, top + 6, 314, top + 26}, row.included);
-        drawText(state, row.name, {330, top + 7, 666, top + 29}, state.bodyFormat.Get(),
-                 row.included ? white : muted);
-        if (!row.groupName.empty()) {
-            D2D1_COLOR_F groupFill = primary;
-            groupFill.a = row.included ? 0.14F : 0.06F;
-            fillRounded(state, {680, top + 5, 958, top + 27}, 7, groupFill);
-            D2D1_COLOR_F groupText = row.included ? primaryHover : muted;
-            drawText(state, L"GRUPA  ·  " + row.groupName,
-                     {690, top + 8, 948, top + 27},
-                     state.smallFormat.Get(), groupText);
-        } else {
-            drawText(state, L"PID " + std::to_wstring(row.processId),
-                     {822, top + 8, 958, top + 29}, state.smallFormat.Get(), muted);
-        }
-        drawAudioGroupSelector(
-            state, {978, top + 5, 1002, top + 27}, row.groupSelected, !running);
+    state.audioScroll =
+        std::clamp(state.audioScroll, 0,
+                   std::max(0, static_cast<int>(state.audioRows.size()) - audioVisibleRows));
+    for (int v = 0; v < audioVisibleRows; ++v) {
+        const int i = state.audioScroll + v;
+        if (i >= static_cast<int>(state.audioRows.size()))
+            break;
+        const auto &row = state.audioRows[static_cast<std::size_t>(i)];
+        const float top = audioRowsRect.top + v * audioRowHeight;
+        const Rect r{audioRowsRect.left, top, audioRowsRect.right, top + audioRowHeight};
+        if (r.contains(state.mouseX, state.mouseY))
+            fillRounded(state, r, 5, field);
+        drawCheckbox(state, {r.left + 8, top + 10, r.left + 28, top + 30}, row.included);
+        drawText(state, row.name, {r.left + 44, top + 12, r.right - 300, top + 36},
+                 state.bodyFormat.Get(), row.included ? white : muted);
+        drawText(state, row.groupName.empty() ? L"Osobna ścieżka" : L"Grupa: " + row.groupName,
+                 {r.right - 286, top + 13, r.right - 64, top + 34}, state.smallFormat.Get(), muted);
+        drawAudioGroupSelector(state, {r.right - 38, top + 9, r.right - 14, top + 33},
+                               row.groupSelected, !running);
+        rule(state, r.left + 44, top + audioRowHeight - 1, r.right - 10);
     }
-    if (state.audioRows.size() > visibleRows) {
-        fillRounded(state, {1044, 574, 1047, 754}, 2, border);
-        const float thumbHeight = 180.0F * visibleRows /
-            static_cast<float>(state.audioRows.size());
-        const float travel = 180.0F - thumbHeight;
-        const float position = static_cast<float>(state.audioScroll) /
-            static_cast<float>(state.audioRows.size() - visibleRows);
-        fillRounded(state, {1043, 574 + position * travel, 1048,
-                            574 + position * travel + thumbHeight}, 3, primary);
-    }
-    if (state.audioRows.empty()) {
-        drawText(state, L"Brak aktywnych aplikacji audio. Uruchom dźwięk i kliknij Odśwież.",
-                 {294, 590, 900, 620}, state.bodyFormat.Get(), muted);
+    if (state.audioRows.empty())
+        drawText(state, L"Uruchom dźwięk w aplikacji i odśwież źródła.",
+                 {x, 552, contentRight - 24, 590}, state.bodyFormat.Get(), muted);
+    if (static_cast<int>(state.audioRows.size()) > audioVisibleRows) {
+        const float h = audioVisibleRows * audioRowHeight;
+        const float thumb = h * audioVisibleRows / static_cast<float>(state.audioRows.size());
+        const float y = audioRowsRect.top + (h - thumb) * state.audioScroll /
+                                                (state.audioRows.size() - audioVisibleRows);
+        fillRounded(state, {contentRight - 8, y, contentRight - 5, y + thumb}, 1.5F, muted);
     }
 }
 
@@ -1877,207 +1852,146 @@ void drawReplayPage(AppState& state) {
     return text;
 }
 
-void drawClipsPage(AppState& state) {
-    drawText(state, L"Biblioteka klipów", {260, 88, 650, 128}, state.titleFormat.Get(), white);
-    drawText(state, L"Najedź na miniaturę i przesuń kursor, aby podejrzeć timeline.",
-             {260, 126, 790, 150}, state.bodyFormat.Get(), muted);
+void drawClipsPage(AppState &state) {
+    pageHeader(state, L"Biblioteka",
+               std::to_wstring(state.clips.size()) +
+                   L" klipów  ·  Przesuń kursor po obrazie, aby podejrzeć klatki.");
     drawButton(state, openClipsRect, L"Otwórz folder", HitTarget::openClips, false);
-    fillRounded(state, clipsListRect, 16, card);
-    strokeRounded(state, clipsListRect, 16, D2D1_COLOR_F{0.080F, 0.082F, 0.115F, 1});
     if (state.clips.empty()) {
-        drawCenteredText(state, L"Nie ma jeszcze zapisanych klipów",
-                         {300, 350, 1020, 390}, state.headingFormat.Get(), white);
-        drawCenteredText(state,
-                         L"Uruchom bufor i użyj skrótu " +
-                             hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk) +
-                             L", aby zapisać pierwszy klip.",
-                         {300, 394, 1020, 430}, state.bodyFormat.Get(), muted);
+        drawIcon(state, Icon::clips, (contentLeft + contentRight) * 0.5F - 20, windowHeight * 0.40F,
+                 muted, 40);
+        drawCenteredText(
+            state, L"Tutaj zaczyna się Twoja kolekcja.",
+            {contentLeft, windowHeight * 0.40F + 60, contentRight, windowHeight * 0.40F + 96},
+            state.headingFormat.Get(), white);
+        drawCenteredText(
+            state,
+            L"Uruchom bufor, a potem naciśnij " +
+                hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk) +
+                L", aby zapisać pierwszy klip.",
+            {contentLeft, windowHeight * 0.40F + 106, contentRight, windowHeight * 0.40F + 136},
+            state.bodyFormat.Get(), muted);
         return;
     }
-    constexpr int visibleRows = 2;
-    const int totalRows = static_cast<int>((state.clips.size() + 1) / 2);
-    state.clipScroll = std::clamp(
-        state.clipScroll, 0, std::max(0, totalRows - visibleRows));
-    for (int visible = 0; visible < visibleRows * 2; ++visible) {
-        const int index = state.clipScroll * 2 + visible;
-        if (index >= static_cast<int>(state.clips.size())) break;
-        const int column = visible % 2;
-        const int row = visible / 2;
-        const float left = 280.0F + column * 380.0F;
-        const float top = 176.0F + row * 276.0F;
-        const Rect clipCard{left, top, left + 370, top + 258};
-        const Rect imageArea{left + 10, top + 10, left + 360, top + 207};
-        const Rect thumbnailArea = aspectFitRect(
-            state.mainWindow, imageArea, 16.0F / 9.0F);
-        const auto& clip = state.clips[static_cast<std::size_t>(index)];
-        const bool hovered = clipCard.contains(state.mouseX, state.mouseY);
-        const bool previewHovered = thumbnailArea.contains(state.mouseX, state.mouseY);
-        const float previewPosition = previewHovered
-            ? std::clamp((state.mouseX - thumbnailArea.left) /
-                         (thumbnailArea.right - thumbnailArea.left), 0.0F, 0.999F)
-            : 0.0F;
-        const bool timelineKnown = clip.preview != nullptr &&
-            clip.preview->duration > 0.0 && clip.preview->framesPerSecond > 0.0;
-        const int totalFrames = timelineKnown
-            ? std::max(1, static_cast<int>(std::ceil(
-                  clip.preview->duration * clip.preview->framesPerSecond)))
-            : 1;
-        const int requestedFrame = timelineKnown
-            ? std::clamp(
-                  static_cast<int>(std::floor(previewPosition * totalFrames)),
-                  0, totalFrames - 1)
-            : 0;
-        if (previewHovered) {
-            requestThumbnail(state.mainWindow, state, clip.path, requestedFrame);
-        }
-        int displayedFrame = requestedFrame;
-        const std::vector<std::uint8_t>* thumbnail{};
-        if (clip.preview != nullptr) {
-            auto frame = clip.preview->frames.find(requestedFrame);
-            if (frame == clip.preview->frames.end() && !clip.preview->frames.empty()) {
+    const int totalRows = (static_cast<int>(state.clips.size()) + clipColumns - 1) / clipColumns;
+    state.clipScroll = std::clamp(state.clipScroll, 0, std::max(0, totalRows - clipVisibleRows));
+    for (int v = 0; v < clipVisibleRows * clipColumns; ++v) {
+        const int i = state.clipScroll * clipColumns + v;
+        if (i >= static_cast<int>(state.clips.size()))
+            break;
+        const auto &clip = state.clips[static_cast<std::size_t>(i)];
+        const Rect r = clipCardRect(v);
+        const Rect thumb{r.left, r.top, r.right, r.top + clipWidth * 9 / 16};
+        const bool hover = thumb.contains(state.mouseX, state.mouseY);
+        const double fraction = hover ? std::clamp(static_cast<double>((state.mouseX - thumb.left) /
+                                                                       (thumb.right - thumb.left)),
+                                                   0.0, 0.999999)
+                                      : 0;
+        const bool known =
+            clip.preview && clip.preview->duration > 0 && clip.preview->framesPerSecond > 0;
+        const int frames =
+            known ? std::max(1, static_cast<int>(std::ceil(clip.preview->duration *
+                                                           clip.preview->framesPerSecond)))
+                  : 1;
+        const int requested = std::clamp(static_cast<int>(fraction * frames), 0, frames - 1);
+        if (hover)
+            requestThumbnail(state.mainWindow, state, clip.path, requested);
+        ID2D1Bitmap *bitmap = nullptr;
+        if (clip.preview && !clip.preview->frames.empty()) {
+            auto frame = clip.preview->frames.find(requested);
+            if (frame == clip.preview->frames.end())
                 frame = clip.preview->frames.begin();
-            }
-            if (frame != clip.preview->frames.end()) {
-                displayedFrame = frame->first;
-                thumbnail = &frame->second;
-            }
+            bitmap = thumbnailBitmap(
+                state, clip.path.wstring() + L"#" + std::to_wstring(frame->first), frame->second);
         }
-
-        D2D1_COLOR_F hoveredCard = primary;
-        hoveredCard.r *= 0.16F;
-        hoveredCard.g *= 0.16F;
-        hoveredCard.b *= 0.16F;
-        fillRounded(state, clipCard, 14,
-                    hovered ? hoveredCard : field);
-        if (hovered) {
-            const float pulse = 0.72F + 0.28F * std::sin(
-                static_cast<float>(GetTickCount64() % 2'400) / 2'400.0F * 6.283185F);
-            drawGlow(state, clipCard, 14, primary, 0.18F + pulse * 0.10F);
-        }
-        fillRounded(state, imageArea, 10, D2D1_COLOR_F{0.008F, 0.008F, 0.012F, 1});
-        fillRounded(state, thumbnailArea, 10, D2D1_COLOR_F{0.008F, 0.008F, 0.012F, 1});
-        const std::wstring bitmapKey = clip.path.wstring() + L"#" +
-            std::to_wstring(displayedFrame);
-        if (ID2D1Bitmap* bitmap = thumbnail == nullptr
-                ? nullptr
-                : thumbnailBitmap(state, bitmapKey, *thumbnail);
-            bitmap != nullptr) {
-            state.renderTarget->DrawBitmap(
-                bitmap, thumbnailArea.d2d(), 1.0F,
-                D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-        } else {
-            const bool failed = state.thumbnailFailures.contains(
-                {clip.path, requestedFrame}) ||
-                (requestedFrame != 0 &&
-                 state.thumbnailFailures.contains({clip.path, 0}));
+        panel(state, r);
+        fillRounded(state, thumb, 8, {0.015F, 0.017F, 0.021F, 1});
+        if (bitmap) {
+            const auto pixels = bitmap->GetSize();
+            const Rect fit = aspectFitRect(state.mainWindow, thumb,
+                                           pixels.width / std::max(1.0F, pixels.height));
+            state.renderTarget->DrawBitmap(bitmap, fit.d2d(), 1,
+                                           D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        } else
             drawCenteredText(state,
-                             failed ? L"Podgląd niedostępny" : L"Generowanie miniatury…",
-                             thumbnailArea,
-                             state.smallFormat.Get(), muted);
-        }
-        strokeRounded(state, thumbnailArea, 10, hovered ? primary : border);
-        if (!previewHovered) {
-            const float centerX = (thumbnailArea.left + thumbnailArea.right) * 0.5F;
-            const float centerY = (thumbnailArea.top + thumbnailArea.bottom) * 0.5F;
-            const Rect playButton = fixedAspectRect(
-                state.mainWindow,
-                {centerX - 24, centerY - 24, centerX + 24, centerY + 24});
-            fillRounded(state, playButton, 24,
-                        D2D1_COLOR_F{0.025F, 0.020F, 0.050F, 0.88F});
-            drawCenteredText(state, L"▶", playButton,
-                             state.headingFormat.Get(), white);
-        } else {
+                             state.thumbnailFailures.contains({clip.path, requested})
+                                 ? L"Podgląd niedostępny"
+                                 : L"Wczytywanie podglądu…",
+                             thumb, state.smallFormat.Get(), muted);
+        if (hover) {
+            strokeRounded(state, thumb, 8, primary);
             fillRounded(state,
-                        {thumbnailArea.left, thumbnailArea.bottom - 5,
-                         thumbnailArea.left + previewPosition *
-                             (thumbnailArea.right - thumbnailArea.left),
-                         thumbnailArea.bottom},
-                        2, primary);
-            if (timelineKnown) {
-                const auto viewport = designViewport(state.mainWindow);
-                const float badgeWidth = 110.0F * viewport.scaleY / viewport.scaleX;
-                const Rect timeBadge{thumbnailArea.right - badgeWidth - 10,
-                                     thumbnailArea.bottom - 34,
-                                     thumbnailArea.right - 10,
-                                     thumbnailArea.bottom - 10};
-                fillRounded(state, timeBadge, 7,
-                            D2D1_COLOR_F{0.010F, 0.010F, 0.016F, 0.88F});
-                const double frameTime = static_cast<double>(requestedFrame) /
-                    clip.preview->framesPerSecond;
-                drawCenteredText(state,
-                                 preciseTimeLabel(frameTime) + L"  •  #" +
-                                     std::to_wstring(requestedFrame),
-                                 timeBadge, state.smallFormat.Get(), white);
-            }
+                        {thumb.left, thumb.bottom - 3,
+                         thumb.left + static_cast<float>(fraction) * (thumb.right - thumb.left),
+                         thumb.bottom},
+                        0, primary);
+        } else if (bitmap != nullptr) {
+            const float cx = (thumb.left + thumb.right) * 0.5F,
+                        cy = (thumb.top + thumb.bottom) * 0.5F;
+            fillRounded(state, {cx - 20, cy - 20, cx + 20, cy + 20}, 20, {0, 0, 0, 0.55F});
+            drawIcon(state, Icon::play, cx - 10, cy - 10, white);
         }
+        const std::wstring stamp = hover && known
+                                       ? preciseTimeLabel(requested / clip.preview->framesPerSecond)
+                                   : known ? timeLabel(clip.preview->duration)
+                                           : L"MP4";
+        const Rect badge{thumb.right - 96, thumb.bottom - 34, thumb.right - 10, thumb.bottom - 10};
+        fillRounded(state, badge, 4, {0, 0, 0, 0.78F});
+        drawCenteredText(state, stamp, badge, state.smallFormat.Get(), white);
         drawText(state, clip.path.stem().wstring(),
-                 {left + 14, top + 216, left + 268, top + 239},
-                  state.bodyFormat.Get(), white);
-        const std::wstring details = clip.preview != nullptr && clip.preview->duration > 0.0
-            ? timeLabel(clip.preview->duration) + L"  •  MP4  •  wiele ścieżek audio"
-            : L"MP4  •  ścieżki audio";
-        drawText(state, details, {left + 14, top + 238, left + 280, top + 256},
-                  state.smallFormat.Get(), muted);
-        drawText(state, sizeLabel(clip.size),
-                 {left + 290, top + 220, left + 354, top + 250},
-                  state.smallFormat.Get(), muted);
+                 {r.left + 14, thumb.bottom + 13, r.right - 14, thumb.bottom + 36},
+                 state.bodyFormat.Get(), white);
+        drawText(state, L"MP4  ·  " + sizeLabel(clip.size),
+                 {r.left + 14, thumb.bottom + 43, r.right - 14, r.bottom - 6},
+                 state.smallFormat.Get(), muted);
     }
-    if (totalRows > visibleRows) {
-        fillRounded(state, {1046, 176, 1049, 710}, 2, border);
-        const float thumbHeight = 534.0F * visibleRows / static_cast<float>(totalRows);
-        const float travel = 534.0F - thumbHeight;
-        const float position = static_cast<float>(state.clipScroll) /
-            static_cast<float>(totalRows - visibleRows);
-        fillRounded(state, {1045, 176 + position * travel, 1050,
-                            176 + position * travel + thumbHeight}, 3, primary);
+    if (totalRows > clipVisibleRows) {
+        const float h = clipsListRect.bottom - clipsListRect.top;
+        const float thumb = h * clipVisibleRows / totalRows;
+        const float y =
+            clipsListRect.top + (h - thumb) * state.clipScroll / (totalRows - clipVisibleRows);
+        fillRounded(state, {contentRight + 12, y, contentRight + 15, y + thumb}, 1.5F, muted);
     }
 }
 
-[[nodiscard]] Rect clipMenuItemRect(const AppState& state, const int item) {
-    const auto& menu = state.clipContextMenuRect;
-    const float top = item < 4
-        ? menu.top + 42.0F + item * 38.0F
-        : menu.top + 210.0F;
+[[nodiscard]] Rect clipMenuItemRect(const AppState &state, const int item) {
+    const auto &menu = state.clipContextMenuRect;
+    const float top = item < 4 ? menu.top + 42.0F + item * 38.0F : menu.top + 210.0F;
     return {menu.left + 8, top, menu.right - 8, top + 36};
 }
 
-void drawClipContextMenu(AppState& state) {
-    if (!state.clipContextMenuOpen || state.clipContextMenuClip.empty()) return;
+void drawClipContextMenu(AppState &state) {
+    if (!state.clipContextMenuOpen || state.clipContextMenuClip.empty())
+        return;
     const Rect menu = state.clipContextMenuRect;
-    drawGlow(state, menu, 14, primary, 0.50F);
-    fillRounded(state, menu, 14, D2D1_COLOR_F{0.018F, 0.018F, 0.028F, 0.985F});
-    strokeRounded(state, menu, 14, D2D1_COLOR_F{0.170F, 0.130F, 0.330F, 1.0F});
+    fillRounded(state, expanded(menu, 3), 11, D2D1_COLOR_F{0, 0, 0, 0.40F});
+    fillRounded(state, menu, 8, card);
+    strokeRounded(state, menu, 8, border);
     drawText(state, state.clipContextMenuClip.stem().wstring(),
              {menu.left + 16, menu.top + 12, menu.right - 16, menu.top + 35},
              state.smallFormat.Get(), muted);
 
     constexpr std::array labels{
-        L"Otwórz w edytorze NexPlay",
-        L"Odtwórz w domyślnej aplikacji",
-        L"Pokaż w folderze",
-        L"Kopiuj ścieżkę pliku",
-        L"Usuń klip do Kosza…",
+        L"Otwórz w edytorze NexPlay", L"Odtwórz w domyślnej aplikacji", L"Pokaż w folderze",
+        L"Kopiuj ścieżkę pliku",      L"Usuń klip do Kosza…",
     };
-    constexpr std::array glyphs{L"✦", L"▶", L"⌕", L"⌘", L"×"};
+    constexpr std::array icons{Icon::edit, Icon::play, Icon::folder, Icon::copy, Icon::trash};
     for (int item = 0; item < static_cast<int>(labels.size()); ++item) {
         const Rect row = clipMenuItemRect(state, item);
         const bool hovered = row.contains(state.mouseX, state.mouseY);
         if (hovered) {
-            fillRounded(state, row, 9,
-                        item == 4 ? D2D1_COLOR_F{0.190F, 0.040F, 0.065F, 1.0F}
-                                  : D2D1_COLOR_F{0.075F, 0.052F, 0.150F, 1.0F});
+            fillRounded(state, row, 5,
+                        item == 4 ? D2D1_COLOR_F{0.190F, 0.040F, 0.065F, 1.0F} : field);
         }
-        drawCenteredText(state, glyphs[static_cast<std::size_t>(item)],
-                         {row.left + 4, row.top, row.left + 38, row.bottom},
-                         state.bodyFormat.Get(), item == 4 ? red : primaryHover);
+        drawIcon(state, icons[static_cast<std::size_t>(item)], row.left + 12, row.top + 9,
+                 item == 4 ? red : muted, 18);
         drawText(state, labels[static_cast<std::size_t>(item)],
-                 {row.left + 44, row.top + 9, row.right - 8, row.bottom},
-                 state.bodyFormat.Get(), item == 4 ? red : white);
+                 {row.left + 44, row.top + 9, row.right - 8, row.bottom}, state.bodyFormat.Get(),
+                 item == 4 ? red : white);
     }
     state.brush->SetColor(border);
-    state.renderTarget->DrawLine(
-        D2D1::Point2F(menu.left + 14, menu.top + 202),
-        D2D1::Point2F(menu.right - 14, menu.top + 202), state.brush.Get());
+    state.renderTarget->DrawLine(D2D1::Point2F(menu.left + 14, menu.top + 202),
+                                 D2D1::Point2F(menu.right - 14, menu.top + 202), state.brush.Get());
 }
 
 [[nodiscard]] std::wstring timeLabel(const double seconds) {
@@ -2090,18 +2004,16 @@ void drawClipContextMenu(AppState& state) {
 }
 
 [[nodiscard]] std::wstring preciseTimeLabel(const double seconds) {
-    const auto milliseconds = static_cast<unsigned long long>(
-        std::max(0.0, seconds) * 1'000.0);
+    const auto milliseconds = static_cast<unsigned long long>(std::max(0.0, seconds) * 1'000.0);
     const unsigned long long minutes = milliseconds / 60'000;
     const unsigned long long remainingSeconds = (milliseconds / 1'000) % 60;
     const unsigned long long remainingMilliseconds = milliseconds % 1'000;
     wchar_t text[32]{};
-    swprintf_s(text, L"%02llu:%02llu.%03llu",
-               minutes, remainingSeconds, remainingMilliseconds);
+    swprintf_s(text, L"%02llu:%02llu.%03llu", minutes, remainingSeconds, remainingMilliseconds);
     return text;
 }
 
-void drawEditorName(AppState& state) {
+void drawEditorName(AppState &state) {
     fillRounded(state, editorNameRect, 10, field);
     strokeRounded(state, editorNameRect, 10,
                   state.activeField == HitTarget::editorName ? primary : border);
@@ -2110,9 +2022,9 @@ void drawEditorName(AppState& state) {
     }
     const std::wstring shown = state.editorName.empty() ? L"Nazwa klipu" : state.editorName;
     if (state.activeField == HitTarget::editorName && state.replaceFieldOnInput) {
-        const float width = std::min(
-            measuredTextWidth(state, shown, state.bodyFormat.Get()) + 14.0F,
-            editorNameRect.right - editorNameRect.left - 24.0F);
+        const float width =
+            std::min(measuredTextWidth(state, shown, state.bodyFormat.Get()) + 14.0F,
+                     editorNameRect.right - editorNameRect.left - 24.0F);
         D2D1_COLOR_F selectionColor = primary;
         selectionColor.a = 0.38F;
         fillRounded(state,
@@ -2121,457 +2033,340 @@ void drawEditorName(AppState& state) {
                     5, selectionColor);
     }
     drawText(state, shown,
-             {editorNameRect.left + 14, editorNameRect.top + 12,
-              editorNameRect.right - 14, editorNameRect.bottom - 8},
+             {editorNameRect.left + 14, editorNameRect.top + 12, editorNameRect.right - 14,
+              editorNameRect.bottom - 8},
              state.bodyFormat.Get(), state.editorName.empty() ? muted : white);
 }
 
 [[nodiscard]] Rect editorAudioTimelineRect(const int visibleRow) {
-    const float top = 578.0F + static_cast<float>(visibleRow) * 44.0F;
-    return {editorTimelineRect.left, top + 5, editorTimelineRect.right, top + 37};
+    const float top = editorAudioRowsRect.top + visibleRow * editorAudioRowHeight;
+    return {editorTimelineRect.left, top, editorTimelineRect.right, top + 36};
 }
-
-void drawEditorMergeToggle(AppState& state) {
-    const float mergeHover = hoverValue(state, HitTarget::editorMergeAudio);
-    D2D1_COLOR_F mergeFill = field;
-    mergeFill.r += primary.r * mergeHover * 0.05F;
-    mergeFill.g += primary.g * mergeHover * 0.05F;
-    mergeFill.b += primary.b * mergeHover * 0.05F;
-    fillRounded(state, editorMergeAudioRect, 10, mergeFill);
-    strokeRounded(state, editorMergeAudioRect, 10,
-                  state.mergeEditorAudio ? primary : border);
-    drawText(state, L"Połącz w jedno audio",
-             {editorMergeAudioRect.left + 12, editorMergeAudioRect.top + 8,
-              editorMergeAudioRect.right - 58, editorMergeAudioRect.bottom},
+void drawEditorMergeToggle(AppState &state) {
+    drawText(state, L"Jedna ścieżka audio",
+             {editorMergeAudioRect.left, editorMergeAudioRect.top + 11,
+              editorMergeAudioRect.right - 50, editorMergeAudioRect.bottom},
              state.smallFormat.Get(), white);
     drawToggle(state,
-               {editorMergeAudioRect.right - 48, editorMergeAudioRect.top + 5,
-                editorMergeAudioRect.right - 10, editorMergeAudioRect.bottom - 5},
+               {editorMergeAudioRect.right - 40, editorMergeAudioRect.top + 8,
+                editorMergeAudioRect.right, editorMergeAudioRect.top + 30},
                state.mergeEditorAudio ? 1.0F : 0.0F);
 }
-
-void drawTimelineRuler(AppState& state) {
-    constexpr float rulerTop = 516.0F;
-    state.brush->SetColor(D2D1_COLOR_F{0.20F, 0.20F, 0.26F, 1.0F});
-    state.renderTarget->DrawLine(
-        D2D1::Point2F(editorTimelineRect.left, rulerTop + 13),
-        D2D1::Point2F(editorTimelineRect.right, rulerTop + 13), state.brush.Get());
-    constexpr int divisions = 10;
-    for (int tick = 0; tick <= divisions; ++tick) {
-        const float fraction = static_cast<float>(tick) / divisions;
-        const float x = editorTimelineRect.left +
-            fraction * (editorTimelineRect.right - editorTimelineRect.left);
-        const bool major = tick % 2 == 0;
-        state.brush->SetColor(major ? muted : border);
-        state.renderTarget->DrawLine(
-            D2D1::Point2F(x, rulerTop + (major ? 5.0F : 9.0F)),
-            D2D1::Point2F(x, rulerTop + 15.0F), state.brush.Get());
-        if (major) {
-            drawCenteredText(
-                state, timeLabel(state.editorDuration * fraction),
-                {x - 28, rulerTop - 9, x + 28, rulerTop + 7},
-                state.smallFormat.Get(), muted);
-        }
+[[nodiscard]] double timelineTickInterval(const double duration, const float width) {
+    const double ideal = std::max(0.001, duration) / std::max(2.0F, std::floor(width / 100));
+    const double magnitude = std::pow(10.0, std::floor(std::log10(ideal)));
+    for (const double factor : {1.0, 2.0, 5.0, 10.0}) {
+        if (magnitude * factor >= ideal)
+            return magnitude * factor;
     }
+    return magnitude * 10;
 }
-
-void drawVideoTimelineTrack(AppState& state) {
+void drawUnifiedTimeline(AppState &state) {
+    panel(state, timelinePanelRect);
+    const float top = timelinePanelRect.top;
+    drawText(state, L"Sekwencja", {contentLeft + 18, top + 16, contentLeft + 200, top + 40},
+             state.buttonFormat.Get(), white);
+    drawText(state, L"Kliknij: przewiń  /  Uchwyty: przytnij",
+             {contentLeft + 208, top + 17, contentRight - 18, top + 40}, state.smallFormat.Get(),
+             muted);
+    rule(state, contentLeft, top + 48, contentRight);
     const double duration = std::max(0.001, state.editorDuration);
     const float width = editorTimelineRect.right - editorTimelineRect.left;
-    const float startX = editorTimelineRect.left +
-        static_cast<float>(state.trimStart / duration) * width;
-    const float endX = editorTimelineRect.left +
-        static_cast<float>(state.trimEnd / duration) * width;
-
-    fillRounded(state, {284, 536, 462, 568}, 6,
-                D2D1_COLOR_F{0.039F, 0.040F, 0.057F, 1.0F});
-    drawText(state, L"V1", {296, 544, 322, 565}, state.smallFormat.Get(), primaryHover);
-    drawText(state, L"Wideo", {332, 542, 452, 565}, state.bodyFormat.Get(), white);
-    fillRounded(state, editorTimelineRect, 5,
-                D2D1_COLOR_F{0.055F, 0.057F, 0.078F, 1.0F});
-
-    if (state.cutEditorSelection) {
-        D2D1_COLOR_F retained = primary;
-        retained.a = 0.34F;
-        fillRounded(state, editorTimelineRect, 5, retained);
-        drawGlow(state, {startX, editorTimelineRect.top, endX, editorTimelineRect.bottom},
-                 5, red, 0.30F);
-        fillRounded(state,
-                    {startX, editorTimelineRect.top, endX, editorTimelineRect.bottom},
-                    5, D2D1_COLOR_F{red.r, red.g, red.b, 0.82F});
-    } else {
-        drawGlow(state, {startX, editorTimelineRect.top, endX, editorTimelineRect.bottom},
-                 5, primary, 0.26F);
-        fillRounded(state,
-                    {startX, editorTimelineRect.top, endX, editorTimelineRect.bottom},
-                    5, D2D1_COLOR_F{primary.r, primary.g, primary.b, 0.72F});
+    const auto timeX = [&](double t) {
+        return editorTimelineRect.left +
+               static_cast<float>(std::clamp(t / duration, 0.0, 1.0)) * width;
+    };
+    const double interval = timelineTickInterval(duration, width);
+    for (int i = 0; i * interval <= duration; ++i) {
+        const double time = i * interval;
+        const float x = timeX(time);
+        const std::wstring label = interval < 1 ? preciseTimeLabel(time) : timeLabel(time);
+        drawCenteredText(state, label, {x - 42, top + 54, x + 42, top + 74},
+                         state.smallFormat.Get(), muted);
+        state.brush->SetColor(border);
+        state.renderTarget->DrawLine({x, top + 76}, {x, editorAudioRowsRect.bottom},
+                                     state.brush.Get());
     }
-
-    state.brush->SetColor(white);
-    state.renderTarget->FillEllipse(D2D1::Ellipse(
-        D2D1::Point2F(startX, (editorTimelineRect.top + editorTimelineRect.bottom) * 0.5F),
-        6, 6), state.brush.Get());
-    state.renderTarget->FillEllipse(D2D1::Ellipse(
-        D2D1::Point2F(endX, (editorTimelineRect.top + editorTimelineRect.bottom) * 0.5F),
-        6, 6), state.brush.Get());
-}
-
-void drawAudioWaveform(
-    AppState& state, const Rect timeline, const float startX, const float endX,
-    const int trackIndex, const bool included) {
-    if (endX <= startX) return;
-    D2D1_COLOR_F waveform = included ? primaryHover : muted;
-    waveform.a = included ? 0.85F : 0.28F;
-    state.brush->SetColor(waveform);
-    const float center = (timeline.top + timeline.bottom) * 0.5F;
-    const float maximum = (timeline.bottom - timeline.top) * 0.38F;
-    for (float x = startX + 4.0F; x < endX - 3.0F; x += 6.0F) {
-        const float sample = 0.22F + 0.78F * std::abs(std::sin(
-            x * 0.071F + static_cast<float>(trackIndex) * 1.91F));
-        const float amplitude = maximum * sample;
-        state.renderTarget->DrawLine(
-            D2D1::Point2F(x, center - amplitude),
-            D2D1::Point2F(x, center + amplitude), state.brush.Get(), 1.0F);
-    }
-}
-
-void drawUnifiedTimeline(AppState& state) {
-    drawTimelineRuler(state);
-    drawVideoTimelineTrack(state);
-
-    constexpr int visibleTracks = 3;
+    drawText(state, L"V1",
+             {contentLeft + 20, editorTimelineRect.top + 10, contentLeft + 48,
+              editorTimelineRect.bottom},
+             state.smallFormat.Get(), primaryHover);
+    drawText(state, L"Wideo",
+             {contentLeft + 64, editorTimelineRect.top + 9, contentLeft + 190,
+              editorTimelineRect.bottom},
+             state.bodyFormat.Get(), white);
+    fillRounded(state, editorTimelineRect, 4, field);
+    const Rect range{timeX(state.trimStart), editorTimelineRect.top, timeX(state.trimEnd),
+                     editorTimelineRect.bottom};
+    auto fill = state.cutEditorSelection ? red : primary;
+    fill.a = 0.30F;
+    fillRounded(state, range, 4, fill);
+    strokeRounded(state, range, 4, state.cutEditorSelection ? red : primary);
+    const auto handle = [&](float x, Rect r) {
+        fillRounded(state, {x - 2, r.top + 7, x + 2, r.bottom - 7}, 1, white);
+    };
+    handle(range.left, range);
+    handle(range.right, range);
     state.editorAudioScroll = std::clamp(
         state.editorAudioScroll, 0,
-        std::max(0, static_cast<int>(state.editorAudioTracks.size()) - visibleTracks));
-    for (int visible = 0; visible < visibleTracks; ++visible) {
-        const int index = state.editorAudioScroll + visible;
-        if (index >= static_cast<int>(state.editorAudioTracks.size())) break;
-        const auto& track = state.editorAudioTracks[static_cast<std::size_t>(index)];
-        const float top = 578.0F + static_cast<float>(visible) * 44.0F;
-        const Rect label{284, top, 462, top + 40};
-        const Rect timeline = editorAudioTimelineRect(visible);
-        const Rect row{284, top, editorTimelineRect.right, top + 40};
-        const bool hovered = state.mouseX >= row.left && state.mouseX <= row.right &&
-            state.mouseY >= row.top && state.mouseY <= row.bottom;
-        fillRounded(state, label, 6,
-                    hovered ? D2D1_COLOR_F{0.052F, 0.046F, 0.086F, 1.0F}
-                            : D2D1_COLOR_F{0.039F, 0.040F, 0.057F, 1.0F});
-        drawCheckbox(state, {294, top + 10, 314, top + 30}, track.included);
-        drawText(state, L"A" + std::to_wstring(index + 1),
-                 {322, top + 5, 350, top + 23}, state.smallFormat.Get(),
-                 track.included ? primaryHover : muted);
-        drawText(state, track.name, {354, top + 4, 454, top + 23},
+        std::max(0, static_cast<int>(state.editorAudioTracks.size()) - editorVisibleTracks));
+    for (int v = 0; v < editorVisibleTracks; ++v) {
+        int i = state.editorAudioScroll + v;
+        if (i >= static_cast<int>(state.editorAudioTracks.size()))
+            break;
+        const auto &track = state.editorAudioTracks[static_cast<std::size_t>(i)];
+        const Rect r = editorAudioTimelineRect(v);
+        drawCheckbox(state, {contentLeft + 18, r.top + 8, contentLeft + 38, r.top + 28},
+                     track.included);
+        drawText(state, L"A" + std::to_wstring(i + 1),
+                 {contentLeft + 50, r.top + 10, contentLeft + 80, r.bottom},
+                 state.smallFormat.Get(), muted);
+        drawText(state, track.name,
+                 {contentLeft + 86, r.top + 9, editorTimelineRect.left - 12, r.bottom},
                  state.smallFormat.Get(), track.included ? white : muted);
-        drawText(state,
-                 preciseTimeLabel(track.start) + L" – " + preciseTimeLabel(track.end),
-                 {322, top + 22, 456, top + 39}, state.smallFormat.Get(), muted);
-
-        fillRounded(state, timeline, 4,
-                    D2D1_COLOR_F{0.050F, 0.052F, 0.071F, 1.0F});
-        const double duration = std::max(0.001, state.editorDuration);
-        const float startX = timeline.left +
-            static_cast<float>(track.start / duration) * (timeline.right - timeline.left);
-        const float endX = timeline.left +
-            static_cast<float>(track.end / duration) * (timeline.right - timeline.left);
+        fillRounded(state, r, 4, field);
+        const Rect audioRange{timeX(track.start), r.top, timeX(track.end), r.bottom};
+        const D2D1_COLOR_F audioColor{0.20F, 0.65F, 0.54F, track.included ? 0.22F : 0.06F};
+        fillRounded(state, audioRange, 4, audioColor);
         if (track.included) {
-            D2D1_COLOR_F range = primary;
-            range.a = hovered ? 0.30F : 0.22F;
-            fillRounded(state, {startX, timeline.top, endX, timeline.bottom}, 4, range);
+            strokeRounded(state, audioRange, 4, {0.24F, 0.58F, 0.50F, 1});
+            handle(audioRange.left, r);
+            handle(audioRange.right, r);
         }
-        drawAudioWaveform(state, timeline, startX, endX, index, track.included);
-        if (track.included) {
-            state.brush->SetColor(white);
-            state.renderTarget->FillEllipse(
-                D2D1::Ellipse(D2D1::Point2F(startX, (timeline.top + timeline.bottom) * 0.5F),
-                              5, 5), state.brush.Get());
-            state.renderTarget->FillEllipse(
-                D2D1::Ellipse(D2D1::Point2F(endX, (timeline.top + timeline.bottom) * 0.5F),
-                              5, 5), state.brush.Get());
-        }
+        if (audioRange.right - audioRange.left > 160)
+            drawText(state, track.included ? track.name : L"Wyciszona",
+                     {audioRange.left + 12, r.top + 10, audioRange.right - 12, r.bottom},
+                     state.smallFormat.Get(), track.included ? white : muted);
     }
-
-    if (state.editorAudioTracks.empty()) {
-        drawText(state, L"Brak ścieżek audio", {284, 584, 456, 612},
-                 state.bodyFormat.Get(), muted);
-    } else if (state.editorAudioTracks.size() > visibleTracks) {
-        const float trackHeight = 132.0F * visibleTracks /
-            static_cast<float>(state.editorAudioTracks.size());
-        const float travel = 132.0F - trackHeight;
-        const int maximumScroll =
-            static_cast<int>(state.editorAudioTracks.size()) - visibleTracks;
-        const float top = 578.0F + travel * state.editorAudioScroll /
-            static_cast<float>(maximumScroll);
-        fillRounded(state, {1038, 578, 1043, 710}, 2.5F, border);
-        fillRounded(state, {1038, top, 1043, top + trackHeight}, 2.5F, primary);
+    if (state.editorAudioTracks.empty())
+        drawText(state, L"Brak ścieżek audio",
+                 {contentLeft + 20, editorAudioRowsRect.top, contentRight - 20,
+                  editorAudioRowsRect.top + 28},
+                 state.smallFormat.Get(), muted);
+    if (static_cast<int>(state.editorAudioTracks.size()) > editorVisibleTracks) {
+        const float h = editorVisibleTracks * editorAudioRowHeight,
+                    thumb = h * editorVisibleTracks /
+                            static_cast<float>(state.editorAudioTracks.size());
+        const float y =
+            editorAudioRowsRect.top + (h - thumb) * state.editorAudioScroll /
+                                          (state.editorAudioTracks.size() - editorVisibleTracks);
+        fillRounded(state, {contentRight - 8, y, contentRight - 5, y + thumb}, 1.5F, muted);
     }
-
-    const double duration = std::max(0.001, state.editorDuration);
-    const float playX = editorTimelineRect.left +
-        static_cast<float>(state.playPosition / duration) *
-            (editorTimelineRect.right - editorTimelineRect.left);
-    state.brush->SetColor(accentSecondary);
-    state.renderTarget->DrawLine(
-        D2D1::Point2F(playX, 516), D2D1::Point2F(playX, 710),
-        state.brush.Get(), 1.5F);
-    state.renderTarget->FillEllipse(
-        D2D1::Ellipse(D2D1::Point2F(playX, 518), 4.5F, 4.5F), state.brush.Get());
+    const float playX = timeX(state.playPosition);
+    state.brush->SetColor(white);
+    state.renderTarget->DrawLine({playX, top + 75}, {playX, editorAudioRowsRect.bottom},
+                                 state.brush.Get());
+    fillRounded(state, {playX - 4, top + 74, playX + 4, top + 81}, 2, white);
 }
-
-void drawEditorPage(AppState& state) {
-    drawButton(state, editorBackRect, L"←  Wróć", HitTarget::editorBack, false);
-    drawText(state, L"Edytor klipu", {366, 88, 650, 128}, state.titleFormat.Get(), white);
-    drawText(state, L"Podgląd i wszystkie ścieżki pracują na jednej osi czasu.",
-             {366, 126, 920, 150}, state.bodyFormat.Get(), muted);
-
-    drawGlow(state, {276, 151, 1044, 428}, 16, primary, 0.16F);
-    fillRounded(state, {276, 151, 1044, 428}, 16, card);
-    strokeRounded(state, {276, 151, 1044, 428}, 16, border);
-
-    fillRounded(state, {260, 440, 1060, 778}, 16, card);
-    strokeRounded(state, {260, 440, 1060, 778}, 16,
-                  D2D1_COLOR_F{0.080F, 0.082F, 0.115F, 1});
-    drawText(state, L"NAZWA NOWEGO PLIKU", {284, 447, 654, 466},
+void drawEditorPage(AppState &state) {
+    drawButton(state, editorBackRect, L"←  Biblioteka", HitTarget::editorBack, false);
+    drawText(state, L"Montaż", {editorBackRect.right + 18, 80, contentRight - 200, 114},
+             state.headingFormat.Get(), white);
+    drawButton(state, editorSaveRect, L"Eksportuj klip", HitTarget::editorSave, true,
+               state.editorDuration > 0);
+    panel(state, previewPanelRect);
+    panel(state, inspectorRect);
+    drawText(state, L"PODGLĄD", {previewPanelRect.left + 16, 144, previewPanelRect.right - 16, 164},
              state.smallFormat.Get(), muted);
-    drawEditorName(state);
-    drawText(state, L".mp4", {664, 476, 714, 500}, state.bodyFormat.Get(), muted);
-    drawEditorMergeToggle(state);
-    drawUnifiedTimeline(state);
-
-    drawButton(state, editorPlayRect, state.playing ? L"Ⅱ" : L"▶",
-               HitTarget::editorPlay, false);
-    drawFullscreenIconButton(state);
-    drawButton(state, editorCutModeRect,
-               state.cutEditorSelection ? L"Wycinanie: WŁ." : L"Wytnij fragment",
-               HitTarget::editorCutMode, false, state.editorDuration > 0.2);
+    drawButton(state, editorPlayRect, L"", HitTarget::editorPlay, false);
+    drawIcon(state, state.playing ? Icon::pause : Icon::play, editorPlayRect.left + 10,
+             editorPlayRect.top + 8, white);
+    drawButton(state, editorFullscreenRect, L"", HitTarget::editorFullscreen, false);
+    drawIcon(state, Icon::expand, editorFullscreenRect.left + 10, editorFullscreenRect.top + 8,
+             white);
     drawCenteredText(state,
                      preciseTimeLabel(state.playPosition) + L" / " +
                          preciseTimeLabel(state.editorDuration),
-                     {598, 728, 836, 758}, state.smallFormat.Get(), muted);
-    drawButton(state, editorSaveRect,
-               state.cutEditorSelection ? L"Wytnij i zapisz jeden klip"
-                                        : L"Eksportuj nowy klip",
-               HitTarget::editorSave, true, state.editorDuration > 0.0);
+                     {editorPlayRect.right + 8, editorPlayRect.top, editorFullscreenRect.left - 8,
+                      editorPlayRect.bottom},
+                     state.smallFormat.Get(), muted);
+    const float x = inspectorRect.left + 16;
+    drawText(state, L"Eksport", {x, 152, contentRight - 16, 178}, state.headingFormat.Get(), white);
+    drawText(state, L"Nazwa nowego pliku", {x, 189, contentRight - 16, 213},
+             state.smallFormat.Get(), muted);
+    drawEditorName(state);
+    drawEditorMergeToggle(state);
+    drawButton(state, editorCutModeRect,
+               state.cutEditorSelection ? L"Wycinanie fragmentu" : L"Przycinanie brzegów",
+               HitTarget::editorCutMode, false, state.editorDuration > 0.2);
+    if (inspectorRect.bottom > 418)
+        drawText(state,
+                 state.cutEditorSelection ? L"Czerwony zakres zostanie usunięty."
+                                          : L"Uchwyty V1 określają początek i koniec.",
+                 {x, 378, contentRight - 16, 414}, state.smallFormat.Get(), muted);
+    drawUnifiedTimeline(state);
 }
 
-void drawSettingsPage(AppState& state) {
-    drawText(state, L"Ustawienia", {260, 88, 650, 128}, state.titleFormat.Get(), white);
-    drawText(state, L"Dopasuj zachowanie, skróty i wygląd NexPlay.",
-             {260, 126, 780, 150}, state.bodyFormat.Get(), muted);
-
-    fillRounded(state, {260, 158, 1060, 338}, 16, card);
-    strokeRounded(state, {260, 158, 1060, 338}, 16,
-                  D2D1_COLOR_F{0.080F, 0.082F, 0.115F, 1});
-    drawText(state, L"Uruchamianie", {284, 174, 620, 202}, state.headingFormat.Get(), white);
-
-    const auto drawStartupRow = [&](const Rect rectangle, const HitTarget target,
-                                    const wchar_t* title, const wchar_t* description,
-                                    const float togglePosition) {
-        const float hover = hoverValue(state, target);
-        D2D1_COLOR_F rowColor = field;
-        rowColor.r += primary.r * hover * 0.055F;
-        rowColor.g += primary.g * hover * 0.055F;
-        rowColor.b += primary.b * hover * 0.055F;
-        if (hover > 0.01F || togglePosition > 0.02F) {
-            const float pulse = 0.65F + 0.35F * std::sin(
-                static_cast<float>(GetTickCount64() % 2'800) / 2'800.0F * 6.283185F);
-            drawGlow(state, rectangle, 12, primary,
-                     hover * 0.22F + togglePosition * pulse * 0.12F);
-        }
-        fillRounded(state, rectangle, 12, rowColor);
-        D2D1_COLOR_F rowBorder = border;
-        if (hover > 0.01F) {
-            rowBorder = primary;
-            rowBorder.a = 0.30F + hover * 0.35F;
-        }
-        strokeRounded(state, rectangle, 12, rowBorder);
-        drawText(state, title,
-                 {rectangle.left + 22, rectangle.top + 10,
-                  rectangle.right - 100, rectangle.top + 32},
-                 state.bodyFormat.Get(), white);
-        drawText(state, description,
-                 {rectangle.left + 22, rectangle.top + 32,
-                  rectangle.right - 100, rectangle.bottom - 5},
-                 state.smallFormat.Get(), muted);
-        drawToggle(state,
-                   {rectangle.right - 70, rectangle.top + 15,
-                    rectangle.right - 26, rectangle.top + 39},
-                   togglePosition);
-    };
-    drawStartupRow(
-        autostartRect, HitTarget::autostartToggle,
-        L"Uruchamiaj NexPlay razem z Windows",
-        L"Program otworzy się cicho w zasobniku po zalogowaniu użytkownika.",
-        state.autostartAnimation);
-    drawStartupRow(
-        autoBufferRect, HitTarget::autoBufferToggle,
-        L"Automatycznie uruchamiaj bufor",
-        L"Nagrywanie ruszy z zapisanymi ustawieniami zaraz po starcie aplikacji.",
-        state.autoBufferAnimation);
-
-    fillRounded(state, {260, 354, 1060, 516}, 16, card);
-    strokeRounded(state, {260, 354, 1060, 516}, 16,
-                  D2D1_COLOR_F{0.080F, 0.082F, 0.115F, 1});
-    drawText(state, L"Skróty globalne", {284, 370, 620, 398},
+void drawSettingsPage(AppState &state) {
+    pageHeader(state, L"Ustawienia", L"Dopasuj NexPlay do swojego sposobu pracy.");
+    panel(state, startupPanelRect);
+    panel(state, hotkeysPanelRect);
+    panel(state, colorPanelRect);
+    drawText(state, L"Uruchamianie", {contentLeft + 20, 188, startupPanelRect.right - 20, 218},
              state.headingFormat.Get(), white);
-
-    const auto drawHotkey = [&](const Rect rectangle, const HitTarget target,
-                                const HotkeyCapture capture, const wchar_t* title,
-                                const UINT modifiers, const UINT virtualKey) {
+    const auto startup = [&](Rect r, HitTarget target, const wchar_t *title, const wchar_t *sub,
+                             float position) {
+        if (hoverValue(state, target) > 0.1F)
+            fillRounded(state, r, 6, field);
+        drawText(state, title, {r.left, r.top + 6, r.right - 52, r.top + 30},
+                 state.bodyFormat.Get(), white);
+        drawText(state, sub, {r.left, r.top + 34, r.right - 52, r.bottom}, state.smallFormat.Get(),
+                 muted);
+        drawToggle(state, {r.right - 40, r.top + 15, r.right, r.top + 37}, position);
+    };
+    startup(autostartRect, HitTarget::autostartToggle, L"Uruchamiaj z Windows",
+            L"Po zalogowaniu, w zasobniku systemowym.", state.autostartAnimation);
+    rule(state, autostartRect.left, 310, autostartRect.right);
+    startup(autoBufferRect, HitTarget::autoBufferToggle, L"Automatyczny bufor",
+            L"Rozpocznij nagrywanie po otwarciu aplikacji.", state.autoBufferAnimation);
+    drawText(state, L"Skróty klawiaturowe",
+             {contentLeft + 20, 448, hotkeysPanelRect.right - 20, 478}, state.headingFormat.Get(),
+             white);
+    const auto hotkey = [&](Rect r, HitTarget target, HotkeyCapture capture, const wchar_t *title,
+                            UINT key, UINT modifiers) {
         const bool listening = state.hotkeyCapture == capture;
-        const float hover = hoverValue(state, target);
-        const float pulse = 0.60F + 0.40F * std::sin(
-            static_cast<float>(GetTickCount64() % 1'900) / 1'900.0F * 6.283185F);
-        D2D1_COLOR_F rowColor = field;
-        rowColor.r += primary.r * (hover * 0.05F + (listening ? 0.05F : 0.0F));
-        rowColor.g += primary.g * (hover * 0.05F + (listening ? 0.05F : 0.0F));
-        rowColor.b += primary.b * (hover * 0.05F + (listening ? 0.05F : 0.0F));
-        if (listening || hover > 0.01F) {
-            drawGlow(state, rectangle, 12, primary,
-                     (listening ? 0.30F + pulse * 0.26F : hover * 0.24F));
-        }
-        fillRounded(state, rectangle, 12, rowColor);
-        strokeRounded(state, rectangle, 12, listening ? primary : border);
-        drawText(state, title, {rectangle.left + 18, rectangle.top + 18,
-                                rectangle.right - 150, rectangle.bottom - 8},
+        fillRounded(state, r, 7, listening ? field : card);
+        strokeRounded(state, r, 7, listening ? primary : border);
+        drawText(state, title, {r.left + 14, r.top + 18, r.right - 156, r.bottom},
                  state.bodyFormat.Get(), white);
-        const std::wstring value = listening
-            ? L"Wciśnij klawisz…" : hotkeyLabel(modifiers, virtualKey);
-        const Rect keycap{rectangle.right - 142, rectangle.top + 10,
-                          rectangle.right - 14, rectangle.bottom - 10};
-        if (listening) drawGlow(state, keycap, 9, primary, 0.28F + pulse * 0.30F);
-        D2D1_COLOR_F keycapColor = primary;
-        keycapColor.r *= 0.13F;
-        keycapColor.g *= 0.13F;
-        keycapColor.b *= 0.13F;
-        fillRounded(state, keycap, 9, listening ? keycapColor : sidebar);
-        strokeRounded(state, keycap, 9, listening ? primary : border);
-        drawCenteredText(state, value,
-                         keycap,
-                         state.buttonFormat.Get(), listening ? primaryHover : muted);
+        const Rect cap{r.right - 146, r.top + 10, r.right - 10, r.bottom - 10};
+        fillRounded(state, cap, 5, field);
+        drawCenteredText(state, listening ? L"Naciśnij klawisz…" : hotkeyLabel(modifiers, key), cap,
+                         state.smallFormat.Get(), listening ? primaryHover : white);
+        if (hoverValue(state, target) > 0.1F)
+            strokeRounded(state, r, 7, muted);
     };
-    drawHotkey(saveHotkeyRect, HitTarget::saveHotkey, HotkeyCapture::save,
-               L"Zapis klipu", state.saveHotkeyModifiers, state.saveHotkeyVk);
-    drawHotkey(stopHotkeyRect, HitTarget::stopHotkey, HotkeyCapture::stop,
-               L"Zatrzymaj bufor", state.stopHotkeyModifiers, state.stopHotkeyVk);
-    drawText(state, L"Kliknij pole i wciśnij nowy klawisz lub kombinację. Esc anuluje zmianę.",
-             {284, 480, 960, 502}, state.smallFormat.Get(), muted);
-
-    fillRounded(state, {260, 532, 1060, 716}, 16, card);
-    strokeRounded(state, {260, 532, 1060, 716}, 16,
-                  D2D1_COLOR_F{0.080F, 0.082F, 0.115F, 1});
-    drawText(state, L"Kolor akcentu", {284, 548, 620, 576},
+    hotkey(saveHotkeyRect, HitTarget::saveHotkey, HotkeyCapture::save, L"Zapisz klip",
+           state.saveHotkeyVk, state.saveHotkeyModifiers);
+    hotkey(stopHotkeyRect, HitTarget::stopHotkey, HotkeyCapture::stop, L"Zatrzymaj bufor",
+           state.stopHotkeyVk, state.stopHotkeyModifiers);
+    drawText(state, L"Kliknij skrót i wciśnij nową kombinację. Esc anuluje.",
+             {contentLeft + 20, 638, hotkeysPanelRect.right - 20, 670}, state.smallFormat.Get(),
+             muted);
+    drawText(state, L"Wygląd", {colorPanelRect.left + 24, 188, contentRight - 24, 218},
              state.headingFormat.Get(), white);
-    drawText(state, L"Kliknij lub przeciągnij, aby wybrać dowolny kolor.",
-             {660, 552, 1028, 574}, state.smallFormat.Get(), muted);
+    drawText(state, L"Kolor akcentu", {colorPanelRect.left + 24, 227, contentRight - 24, 251},
+             state.smallFormat.Get(), muted);
 
     const Rect accentPlane = fixedAspectRect(state.mainWindow, accentPlaneRect);
     const Rect accentHue = fixedAspectRect(state.mainWindow, accentHueRect);
     const Rect accentPreview = fixedAspectRect(state.mainWindow, accentPreviewRect);
     const D2D1_COLOR_F hueColor = hsvColor(state.accentHue, 1.0F, 1.0F);
-    fillRounded(state, accentPlane, 10, hueColor);
-    const auto overlayGradient = [&](const D2D1_GRADIENT_STOP* stops,
-                                     const UINT32 count,
-                                     const D2D1_POINT_2F start,
-                                     const D2D1_POINT_2F end,
+    fillRounded(state, accentPlane, 8, hueColor);
+    const auto overlayGradient = [&](const D2D1_GRADIENT_STOP *stops, const UINT32 count,
+                                     const D2D1_POINT_2F start, const D2D1_POINT_2F end,
                                      const Rect rectangle) {
         ComPtr<ID2D1GradientStopCollection> collection;
         ComPtr<ID2D1LinearGradientBrush> gradient;
-        if (SUCCEEDED(state.renderTarget->CreateGradientStopCollection(
-                stops, count, &collection)) &&
+        if (SUCCEEDED(
+                state.renderTarget->CreateGradientStopCollection(stops, count, &collection)) &&
             SUCCEEDED(state.renderTarget->CreateLinearGradientBrush(
-                D2D1::LinearGradientBrushProperties(start, end),
-                collection.Get(), &gradient))) {
-            state.renderTarget->FillRectangle(rectangle.d2d(), gradient.Get());
+                D2D1::LinearGradientBrushProperties(start, end), collection.Get(), &gradient))) {
+            const float radius = std::min(8.0F, (rectangle.right - rectangle.left) * 0.5F);
+            state.renderTarget->FillRoundedRectangle(
+                D2D1::RoundedRect(rectangle.d2d(), radius, radius), gradient.Get());
         }
     };
     const D2D1_GRADIENT_STOP saturationStops[]{
-        {0.0F, D2D1_COLOR_F{1, 1, 1, 1}}, {1.0F, D2D1_COLOR_F{1, 1, 1, 0}},
+        {0.0F, D2D1_COLOR_F{1, 1, 1, 1}},
+        {1.0F, D2D1_COLOR_F{1, 1, 1, 0}},
     };
-    overlayGradient(saturationStops, 2,
-                    D2D1::Point2F(accentPlane.left, accentPlane.top),
-                    D2D1::Point2F(accentPlane.right, accentPlane.top),
-                    accentPlane);
+    overlayGradient(saturationStops, 2, D2D1::Point2F(accentPlane.left, accentPlane.top),
+                    D2D1::Point2F(accentPlane.right, accentPlane.top), accentPlane);
     const D2D1_GRADIENT_STOP valueStops[]{
-        {0.0F, D2D1_COLOR_F{0, 0, 0, 0}}, {1.0F, D2D1_COLOR_F{0, 0, 0, 1}},
+        {0.0F, D2D1_COLOR_F{0, 0, 0, 0}},
+        {1.0F, D2D1_COLOR_F{0, 0, 0, 1}},
     };
-    overlayGradient(valueStops, 2,
-                    D2D1::Point2F(accentPlane.left, accentPlane.top),
-                    D2D1::Point2F(accentPlane.left, accentPlane.bottom),
-                    accentPlane);
-    strokeRounded(state, accentPlane, 10, border);
+    overlayGradient(valueStops, 2, D2D1::Point2F(accentPlane.left, accentPlane.top),
+                    D2D1::Point2F(accentPlane.left, accentPlane.bottom), accentPlane);
+    strokeRounded(state, accentPlane, 8, border);
 
     constexpr D2D1_GRADIENT_STOP hueStops[]{
-        {0.0F, {1, 0, 0, 1}}, {0.167F, {1, 1, 0, 1}},
-        {0.333F, {0, 1, 0, 1}}, {0.5F, {0, 1, 1, 1}},
-        {0.667F, {0, 0, 1, 1}}, {0.833F, {1, 0, 1, 1}},
+        {0.0F, {1, 0, 0, 1}}, {0.167F, {1, 1, 0, 1}}, {0.333F, {0, 1, 0, 1}},
+        {0.5F, {0, 1, 1, 1}}, {0.667F, {0, 0, 1, 1}}, {0.833F, {1, 0, 1, 1}},
         {1.0F, {1, 0, 0, 1}},
     };
     overlayGradient(hueStops, static_cast<UINT32>(std::size(hueStops)),
                     D2D1::Point2F(accentHue.left, accentHue.top),
-                    D2D1::Point2F(accentHue.left, accentHue.bottom),
-                    accentHue);
-    strokeRounded(state, accentHue, 10, border);
+                    D2D1::Point2F(accentHue.left, accentHue.bottom), accentHue);
+    strokeRounded(state, accentHue, 8, border);
 
-    const float pickerX = accentPlane.left +
-        state.accentSaturation * (accentPlane.right - accentPlane.left);
-    const float pickerY = accentPlane.top +
-        (1.0F - state.accentValue) * (accentPlane.bottom - accentPlane.top);
-    const Rect pickerGlow = fixedAspectRect(
-        state.mainWindow, {pickerX - 7, pickerY - 7, pickerX + 7, pickerY + 7});
-    drawGlow(state, pickerGlow, 7,
-             white, 0.45F);
-    const auto viewport = designViewport(state.mainWindow);
-    const float circleRadiusX = 6.0F * viewport.scaleY / viewport.scaleX;
+    const float pickerX =
+        accentPlane.left + state.accentSaturation * (accentPlane.right - accentPlane.left);
+    const float pickerY =
+        accentPlane.top + (1.0F - state.accentValue) * (accentPlane.bottom - accentPlane.top);
+    const Rect pickerGlow =
+        fixedAspectRect(state.mainWindow, {pickerX - 7, pickerY - 7, pickerX + 7, pickerY + 7});
+    drawGlow(state, pickerGlow, 7, white, 0.45F);
     state.brush->SetColor(white);
-    state.renderTarget->DrawEllipse(
-        D2D1::Ellipse(D2D1::Point2F(pickerX, pickerY), circleRadiusX, 6),
-        state.brush.Get(), 2.0F);
-    const float hueY = accentHue.top +
-        state.accentHue * (accentHue.bottom - accentHue.top);
-    const float hueHandleX = 3.0F * viewport.scaleY / viewport.scaleX;
+    state.renderTarget->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(pickerX, pickerY), 6, 6),
+                                    state.brush.Get(), 2.0F);
+    const float hueY = accentHue.top + state.accentHue * (accentHue.bottom - accentHue.top);
+    const float hueHandleX = 3.0F;
     state.brush->SetColor(white);
     state.renderTarget->DrawRoundedRectangle(
         D2D1::RoundedRect(D2D1::RectF(accentHue.left - hueHandleX, hueY - 3,
-                                     accentHue.right + hueHandleX, hueY + 3),
+                                      accentHue.right + hueHandleX, hueY + 3),
                           hueHandleX, 3),
         state.brush.Get(), 2.0F);
 
-    const float pulse = 0.62F + 0.38F * std::sin(
-        static_cast<float>(GetTickCount64() % 2'600) / 2'600.0F * 6.283185F);
-    drawGlow(state, accentPreview, 12, primary, 0.30F + pulse * 0.26F);
-    fillRounded(state, accentPreview, 12, primary);
-    drawCenteredText(state, accentHexLabel(state),
-                     {accentPreview.left, accentPreview.top + 10,
-                      accentPreview.right, accentPreview.top + 42},
-                     state.headingFormat.Get(), white);
-    drawCenteredText(state, L"AKCENT",
-                     {accentPreview.left, accentPreview.top + 49,
-                      accentPreview.right, accentPreview.bottom - 4},
-                     state.smallFormat.Get(), white);
+    fillRounded(state, accentPreview, 7, field);
+    fillRounded(state,
+                {accentPreview.left + 12, accentPreview.top + 12, accentPreview.left + 52,
+                 accentPreview.top + 52},
+                6, primary);
+    drawCenteredText(
+        state, accentHexLabel(state),
+        {accentPreview.left + 56, accentPreview.top, accentPreview.right, accentPreview.bottom},
+        state.headingFormat.Get(), white);
 }
 
-void paint(const HWND window, AppState& state) {
+void drawScene(AppState &state) {
+    const ULONGLONG now = GetTickCount64();
+    if (state.renderedPage != state.page) {
+        state.renderedPage = state.page;
+        state.pageTransitionStart = now;
+    }
+    drawSidebar(state);
+    drawTitlebar(state);
+    if (state.page == Page::replay)
+        drawReplayPage(state);
+    else if (state.page == Page::clips)
+        drawClipsPage(state);
+    else if (state.page == Page::editor)
+        drawEditorPage(state);
+    else
+        drawSettingsPage(state);
+    // The native video child must not be faded independently of its player.
+    // Navigation fades only affect the painted pages, and respect reduced motion.
+    if (state.mainWindow != nullptr && state.clientAnimations && state.page != Page::editor &&
+        state.pageTransitionStart != 0 && now - state.pageTransitionStart < 160) {
+        const float remaining = 1.0F - static_cast<float>(now - state.pageTransitionStart) / 160;
+        auto veil = background;
+        veil.a = remaining * remaining * 0.75F;
+        fillRounded(state, {contentLeft - 1, 70, contentRight + 16, windowHeight - 50}, 0, veil);
+    }
+    rule(state, contentLeft, windowHeight - 44, contentRight);
+    drawText(state, state.status,
+             {contentLeft, windowHeight - 30, contentRight - 200, windowHeight - 8},
+             state.smallFormat.Get(), state.status.starts_with(L"Błąd") ? red : muted);
+    drawText(state, L"LOKALNIE  /  NVENC",
+             {contentRight - 156, windowHeight - 30, contentRight, windowHeight - 8},
+             state.smallFormat.Get(), muted);
+    drawClipContextMenu(state);
+    drawAudioGroupDialog(state);
+}
+void paint(const HWND window, AppState &state) {
     PAINTSTRUCT paintInfo{};
     BeginPaint(window, &paintInfo);
     try {
         ensureGraphics(window, state);
         state.renderTarget->BeginDraw();
         state.renderTarget->Clear(background);
-        const auto viewport = designViewport(window);
-        state.renderTarget->SetTransform(D2D1::Matrix3x2F(
-            viewport.scaleX, 0, 0, viewport.scaleY, 0, 0));
-        drawAmbientGlow(state);
-        drawSidebar(state);
-        drawTitlebar(state);
-        if (state.page == Page::replay) drawReplayPage(state);
-        else if (state.page == Page::clips) drawClipsPage(state);
-        else if (state.page == Page::editor) drawEditorPage(state);
-        else drawSettingsPage(state);
-        drawClipContextMenu(state);
-        drawAudioGroupDialog(state);
-        state.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+        drawScene(state);
         if (state.renderTarget->EndDraw() == D2DERR_RECREATE_TARGET) {
             state.renderTarget.Reset();
+            state.windowRenderTarget.Reset();
             state.brush.Reset();
             state.thumbnailBitmaps.clear();
         }
@@ -2580,7 +2375,7 @@ void paint(const HWND window, AppState& state) {
     EndPaint(window, &paintInfo);
 }
 
-void updateEditorVisibility(AppState& state) {
+void updateEditorVisibility(AppState &state) {
     if (state.page == Page::clips || state.page == Page::settings ||
         (state.page == Page::replay && state.engine.isRunning())) {
         state.activeField = HitTarget::none;
@@ -2588,7 +2383,7 @@ void updateEditorVisibility(AppState& state) {
     if (state.videoWindow != nullptr) {
         if (state.mainWindow != nullptr) {
             const RECT video = physicalRect(
-                state.mainWindow, {284, 159, 1036, 420});
+                state.mainWindow, videoSurfaceRect);
             MoveWindow(state.videoWindow, video.left, video.top,
                        std::max(1L, video.right - video.left),
                        std::max(1L, video.bottom - video.top), TRUE);
@@ -2737,7 +2532,7 @@ void exitFullscreen(AppState& state) {
     state.fullscreenVideoWindow = nullptr;
     state.fullscreen = false;
     if (fullscreenWindow != nullptr) DestroyWindow(fullscreenWindow);
-    const RECT video = physicalRect(state.mainWindow, {284, 159, 1036, 420});
+    const RECT video = physicalRect(state.mainWindow, videoSurfaceRect);
     MoveWindow(state.videoWindow, video.left, video.top,
                std::max(1L, video.right - video.left),
                std::max(1L, video.bottom - video.top), TRUE);
@@ -2875,7 +2670,7 @@ void moveEditorAudioHandle(AppState& state, const float x) {
     if (state.editorDuration <= 0.0 || state.activeEditorAudioTrack < 0 ||
         state.activeEditorAudioTrack >= static_cast<int>(state.editorAudioTracks.size())) return;
     const int visible = state.activeEditorAudioTrack - state.editorAudioScroll;
-    if (visible < 0 || visible >= 3) return;
+    if (visible < 0 || visible >= editorVisibleTracks) return;
     const Rect timeline = editorAudioTimelineRect(visible);
     const double position = std::clamp(
         static_cast<double>((x - timeline.left) / (timeline.right - timeline.left)) *
@@ -3376,36 +3171,6 @@ void trayDrawCenteredText(AppState& state, const std::wstring& text, const Rect 
     format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 }
 
-void trayDrawGlow(AppState& state, const Rect rectangle, const float radius,
-                  const D2D1_COLOR_F source, const float intensity) {
-    for (int layer = 5; layer >= 1; --layer) {
-        D2D1_COLOR_F glow = source;
-        glow.a = intensity * (0.018F + static_cast<float>(6 - layer) * 0.012F);
-        trayStrokeRounded(
-            state, expanded(rectangle, static_cast<float>(layer) * 1.7F),
-            radius + static_cast<float>(layer) * 1.7F, glow,
-            static_cast<float>(layer) * 1.4F);
-    }
-}
-
-void trayFillAccentGradient(AppState& state, const Rect rectangle, const float radius) {
-    const D2D1_GRADIENT_STOP stops[] = {{0.0F, primary}, {1.0F, accentSecondary}};
-    ComPtr<ID2D1GradientStopCollection> collection;
-    ComPtr<ID2D1LinearGradientBrush> gradient;
-    if (SUCCEEDED(state.trayMenuRenderTarget->CreateGradientStopCollection(
-            stops, static_cast<UINT32>(std::size(stops)), &collection)) &&
-        SUCCEEDED(state.trayMenuRenderTarget->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(
-                D2D1::Point2F(rectangle.left, rectangle.top),
-                D2D1::Point2F(rectangle.right, rectangle.bottom)),
-            collection.Get(), &gradient))) {
-        state.trayMenuRenderTarget->FillRoundedRectangle(
-            D2D1::RoundedRect(rectangle.d2d(), radius, radius), gradient.Get());
-    } else {
-        trayFillRounded(state, rectangle, radius, primary);
-    }
-}
-
 void drawTrayMenuIcon(AppState& state, const int item, const float top,
                       const D2D1_COLOR_F color) {
     auto* target = state.trayMenuRenderTarget.Get();
@@ -3442,11 +3207,10 @@ void drawTrayMenuRow(AppState& state, const int item, const Rect rectangle,
     if (hover > 0.01F && enabled) {
         D2D1_COLOR_F hoverFill = blendColor(field, accent, 0.11F);
         hoverFill.a = 0.40F + hover * 0.50F;
-        trayDrawGlow(state, rectangle, 10, accent, hover * 0.45F);
-        trayFillRounded(state, rectangle, 10, hoverFill);
+        trayFillRounded(state, rectangle, 6, hoverFill);
         D2D1_COLOR_F hoverBorder = accent;
         hoverBorder.a = hover * 0.34F;
-        trayStrokeRounded(state, rectangle, 10, hoverBorder);
+        trayStrokeRounded(state, rectangle, 6, hoverBorder);
     }
     const D2D1_COLOR_F content = !enabled
         ? blendColor(muted, background, 0.40F)
@@ -3465,30 +3229,9 @@ void paintTrayMenu(const HWND window, AppState& state) {
         target->BeginDraw();
         target->Clear(background);
 
-        const float phase = static_cast<float>(GetTickCount64() % 4000) / 4000.0F;
-        D2D1_COLOR_F ambient = primary;
-        ambient.a = 0.08F + std::sin(phase * 6.2831853F) * 0.02F;
-        const D2D1_GRADIENT_STOP ambientStops[] = {
-            {0.0F, ambient},
-            {1.0F, D2D1_COLOR_F{0, 0, 0, 0}},
-        };
-        ComPtr<ID2D1GradientStopCollection> collection;
-        ComPtr<ID2D1RadialGradientBrush> gradient;
-        if (SUCCEEDED(target->CreateGradientStopCollection(
-                ambientStops, static_cast<UINT32>(std::size(ambientStops)), &collection)) &&
-            SUCCEEDED(target->CreateRadialGradientBrush(
-                D2D1::RadialGradientBrushProperties(
-                    D2D1::Point2F(264, 22), D2D1::Point2F(), 142, 104),
-                collection.Get(), &gradient))) {
-            target->FillEllipse(
-                D2D1::Ellipse(D2D1::Point2F(264, 22), 142, 104), gradient.Get());
-        }
-
         trayStrokeRounded(state, {0.5F, 0.5F, trayMenuWidth - 0.5F,
-                                  trayMenuHeight - 0.5F}, 16,
-                          blendColor(border, primary, 0.16F));
-        trayDrawGlow(state, {18, 16, 48, 46}, 9, primary, 0.48F);
-        trayFillAccentGradient(state, {18, 16, 48, 46}, 9);
+                                  trayMenuHeight - 0.5F}, 8, border);
+        trayFillRounded(state, {18, 16, 48, 46}, 6, primary);
         trayDrawCenteredText(state, L"N", {18, 16, 48, 46},
                              state.trayMenuTitleFormat.Get(), white);
         trayDrawText(state, L"NexPlay", {58, 18, 150, 42},
@@ -3637,7 +3380,8 @@ LRESULT CALLBACK trayMenuWindowProcedure(
             for (std::size_t index = 0; index < state->trayMenuHoverAnimation.size(); ++index) {
                 const float target = state->trayMenuHover == static_cast<int>(index) ? 1.0F : 0.0F;
                 const float before = state->trayMenuHoverAnimation[index];
-                state->trayMenuHoverAnimation[index] += (target - before) * 0.20F;
+                state->trayMenuHoverAnimation[index] +=
+                    (target - before) * (state->clientAnimations ? 0.20F : 1.0F);
                 if (std::abs(target - state->trayMenuHoverAnimation[index]) < 0.006F) {
                     state->trayMenuHoverAnimation[index] = target;
                 }
@@ -3705,17 +3449,10 @@ void showTrayMenu(const HWND window, AppState& state) {
 
 [[nodiscard]] int clipIndexAt(const AppState& state, const float x, const float y) {
     if (state.page != Page::clips || !clipsListRect.contains(x, y)) return -1;
-    for (int visible = 0; visible < 4; ++visible) {
-        const int column = visible % 2;
-        const int row = visible / 2;
-        const Rect clipCard{
-            280.0F + column * 380.0F,
-            176.0F + row * 276.0F,
-            650.0F + column * 380.0F,
-            434.0F + row * 276.0F,
-        };
+    for (int visible = 0; visible < clipVisibleRows*clipColumns; ++visible) {
+        const Rect clipCard=clipCardRect(visible);
         if (!clipCard.contains(x, y)) continue;
-        const int index = state.clipScroll * 2 + visible;
+        const int index = state.clipScroll * clipColumns + visible;
         return index < static_cast<int>(state.clips.size()) ? index : -1;
     }
     return -1;
@@ -4063,19 +3800,20 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
     }
 
     if (state.page == Page::editor &&
-        x >= 284 && x <= 462 && y >= 578 && y < 710) {
-        const int index = static_cast<int>((y - 578) / 44) + state.editorAudioScroll;
+        x >= editorAudioRowsRect.left && x < editorTimelineRect.left &&
+        y >= editorAudioRowsRect.top && y < editorAudioRowsRect.top+editorVisibleTracks*editorAudioRowHeight) {
+        const int index = static_cast<int>((y-editorAudioRowsRect.top)/editorAudioRowHeight) + state.editorAudioScroll;
         if (index >= 0 && index < static_cast<int>(state.editorAudioTracks.size())) {
             auto& track = state.editorAudioTracks[static_cast<std::size_t>(index)];
             track.included = !track.included;
             InvalidateRect(window, nullptr, FALSE);
         }
     } else if (state.page == Page::replay && !state.engine.isRunning() &&
-        x >= 280 && x <= 1038 && y >= 574 && y < 754) {
-        const int index = static_cast<int>((y - 574) / 36) + state.audioScroll;
+        audioRowsRect.contains(x,y) && y < audioRowsRect.top+audioVisibleRows*audioRowHeight) {
+        const int index = static_cast<int>((y-audioRowsRect.top)/audioRowHeight) + state.audioScroll;
         if (index >= 0 && index < static_cast<int>(state.audioRows.size())) {
             auto& row = state.audioRows[static_cast<std::size_t>(index)];
-            if (x >= 964) {
+            if (x >= audioRowsRect.right-54) {
                 if (!row.groupName.empty()) {
                     const bool select = !row.groupSelected;
                     for (auto& candidate : state.audioRows) {
@@ -4119,6 +3857,8 @@ LRESULT CALLBACK windowProcedure(
     switch (message) {
     case WM_CREATE: {
         state->mainWindow = window;
+        updateLayout(window);
+        SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &state->clientAnimations, 0);
         removeLegacyThumbnailCache();
         loadPersistentSettings(*state);
         const int darkMode = TRUE;
@@ -4155,6 +3895,11 @@ LRESULT CALLBACK windowProcedure(
     case WM_PAINT:
         if (state != nullptr) paint(window, *state);
         return 0;
+    case WM_SETTINGCHANGE:
+        if (state != nullptr) {
+            SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &state->clientAnimations, 0);
+        }
+        break;
     case WM_ERASEBKGND:
         return 1;
     case WM_NCHITTEST: {
@@ -4180,7 +3925,7 @@ LRESULT CALLBACK windowProcedure(
         }
         const auto logical = designPoint(
             window, static_cast<float>(point.x), static_cast<float>(point.y));
-        if (logical.y < 64 &&
+        if (logical.y < 44 &&
             !minimizeRect.contains(logical.x, logical.y) &&
             !maximizeRect.contains(logical.x, logical.y) &&
             !closeRect.contains(logical.x, logical.y)) {
@@ -4199,13 +3944,15 @@ LRESULT CALLBACK windowProcedure(
             const float y = logical.y;
             const bool audioTimeline = state->page == Page::editor &&
                 x >= editorTimelineRect.left && x <= editorTimelineRect.right &&
-                y >= 578 && y < 710;
+                y >= editorAudioRowsRect.top &&
+                y < editorAudioRowsRect.top+editorVisibleTracks*editorAudioRowHeight;
             const bool row =
                 (state->page == Page::replay && !state->engine.isRunning() &&
-                 x >= 280 && x <= 1038 && y >= 574 && y < 754) ||
+                 audioRowsRect.contains(x,y)) ||
                 (state->page == Page::clips && clipsListRect.contains(x, y)) ||
                 (state->page == Page::editor &&
-                 x >= 284 && x <= 462 && y >= 578 && y < 710);
+                 x >= editorAudioRowsRect.left && x < editorTimelineRect.left &&
+                 y >= editorAudioRowsRect.top && y < editorAudioRowsRect.bottom);
             const HitTarget target = hitTest(*state, x, y);
             if (target == HitTarget::durationField || target == HitTarget::fpsField ||
                 target == HitTarget::bitrateField ||
@@ -4296,8 +4043,9 @@ LRESULT CALLBACK windowProcedure(
             state->editorDuration > 0.0 &&
             logical.x >= editorTimelineRect.left &&
             logical.x <= editorTimelineRect.right &&
-            logical.y >= 578 && logical.y < 710) {
-            const int visible = static_cast<int>((logical.y - 578) / 44);
+            logical.y >= editorAudioRowsRect.top &&
+            logical.y < editorAudioRowsRect.top+editorVisibleTracks*editorAudioRowHeight) {
+            const int visible = static_cast<int>((logical.y-editorAudioRowsRect.top)/editorAudioRowHeight);
             const int index = visible + state->editorAudioScroll;
             if (index >= 0 && index < static_cast<int>(state->editorAudioTracks.size()) &&
                 state->editorAudioTracks[static_cast<std::size_t>(index)].included) {
@@ -4310,15 +4058,18 @@ LRESULT CALLBACK windowProcedure(
                     static_cast<float>(track.end / state->editorDuration) *
                         (timeline.right - timeline.left);
                 const float clickX = logical.x;
-                state->activeEditorAudioTrack = index;
-                state->dragHandle = std::abs(clickX - startX) <= std::abs(clickX - endX)
-                    ? DragHandle::audioStart : DragHandle::audioEnd;
+                const bool grabStart=std::abs(clickX-startX)<=10;
+                const bool grabEnd=std::abs(clickX-endX)<=10;
+                state->activeEditorAudioTrack = grabStart||grabEnd ? index : -1;
+                state->dragHandle = grabStart ? DragHandle::audioStart :
+                    (grabEnd ? DragHandle::audioEnd : DragHandle::playhead);
                 if (IMFPMediaPlayer* player = activeEditorPlayer(*state); player != nullptr) {
                     player->Pause();
                 }
                 state->playing = false;
                 SetCapture(window);
-                moveEditorAudioHandle(*state, clickX);
+                if (state->dragHandle==DragHandle::playhead) moveTrimHandle(*state, clickX);
+                else moveEditorAudioHandle(*state, clickX);
                 InvalidateRect(window, nullptr, FALSE);
                 return 0;
             }
@@ -4327,7 +4078,7 @@ LRESULT CALLBACK windowProcedure(
             state->editorDuration > 0.0 &&
             logical.x >= editorTimelineRect.left - 10 &&
             logical.x <= editorTimelineRect.right + 10 &&
-            logical.y >= editorTimelineRect.top - 10 &&
+            logical.y >= editorTimelineRect.top - 32 &&
             logical.y <= editorTimelineRect.bottom + 10) {
             const float timelineWidth = editorTimelineRect.right - editorTimelineRect.left;
             const float startX = editorTimelineRect.left +
@@ -4336,9 +4087,11 @@ LRESULT CALLBACK windowProcedure(
                 static_cast<float>(state->trimEnd / state->editorDuration) * timelineWidth;
             const float clickX = logical.x;
             constexpr float handleGrabRadius = 13.0F;
-            if (std::abs(clickX - startX) <= handleGrabRadius) {
+            const bool onVideoTrack = logical.y >= editorTimelineRect.top &&
+                logical.y <= editorTimelineRect.bottom;
+            if (onVideoTrack && std::abs(clickX - startX) <= handleGrabRadius) {
                 state->dragHandle = DragHandle::start;
-            } else if (std::abs(clickX - endX) <= handleGrabRadius) {
+            } else if (onVideoTrack && std::abs(clickX - endX) <= handleGrabRadius) {
                 state->dragHandle = DragHandle::end;
             } else {
                 state->dragHandle = DragHandle::playhead;
@@ -4508,20 +4261,21 @@ LRESULT CALLBACK windowProcedure(
         return 0;
     case WM_TIMER:
         if (state != nullptr && wParam == 1) {
+            const float speed = state->clientAnimations ? 0.22F : 1.0F;
             for (std::size_t index = 1; index < state->hoverAnimation.size(); ++index) {
                 const float target = index == static_cast<std::size_t>(state->hover) ? 1.0F : 0.0F;
                 state->hoverAnimation[index] +=
-                    (target - state->hoverAnimation[index]) * 0.22F;
+                    (target - state->hoverAnimation[index]) * speed;
             }
             const float microphoneTarget = state->microphone ? 1.0F : 0.0F;
             state->microphoneAnimation +=
-                (microphoneTarget - state->microphoneAnimation) * 0.20F;
+                (microphoneTarget - state->microphoneAnimation) * speed;
             const float autostartTarget = state->autostart ? 1.0F : 0.0F;
             state->autostartAnimation +=
-                (autostartTarget - state->autostartAnimation) * 0.20F;
+                (autostartTarget - state->autostartAnimation) * speed;
             const float autoBufferTarget = state->autoBuffer ? 1.0F : 0.0F;
             state->autoBufferAnimation +=
-                (autoBufferTarget - state->autoBufferAnimation) * 0.20F;
+                (autoBufferTarget - state->autoBufferAnimation) * speed;
             if (state->page == Page::editor) {
                 updateEditorPlayback(*state);
                 if (!state->fullscreen && state->mediaPlayer != nullptr &&
@@ -4648,8 +4402,10 @@ LRESULT CALLBACK windowProcedure(
         }
         return 0;
     case WM_SIZE:
-        if (state != nullptr && state->renderTarget != nullptr && LOWORD(lParam) > 0 && HIWORD(lParam) > 0) {
-            state->renderTarget->Resize(D2D1::SizeU(LOWORD(lParam), HIWORD(lParam)));
+        if (wParam == SIZE_MINIMIZED) return 0;
+        updateLayout(window);
+        if (state != nullptr && state->windowRenderTarget != nullptr && LOWORD(lParam) > 0 && HIWORD(lParam) > 0) {
+            state->windowRenderTarget->Resize(D2D1::SizeU(LOWORD(lParam), HIWORD(lParam)));
         }
         if (state != nullptr && LOWORD(lParam) > 0 && HIWORD(lParam) > 0) {
             updateEditorVisibility(*state);
@@ -4658,8 +4414,8 @@ LRESULT CALLBACK windowProcedure(
         return 0;
     case WM_GETMINMAXINFO:
         if (auto* limits = reinterpret_cast<MINMAXINFO*>(lParam); limits != nullptr) {
-            limits->ptMinTrackSize.x = 896;
-            limits->ptMinTrackSize.y = 640;
+            limits->ptMinTrackSize.x = 1080;
+            limits->ptMinTrackSize.y = 740;
             MONITORINFO monitorInfo{sizeof(monitorInfo)};
             const HMONITOR monitor = MonitorFromWindow(
                 window, MONITOR_DEFAULTTONEAREST);

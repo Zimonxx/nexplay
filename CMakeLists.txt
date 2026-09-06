@@ -252,3 +252,18 @@ target_link_libraries(nexplay PRIVATE
     shell32
     user32
 )
+
+# Developer-only offscreen UI validation. Not included in release packages.
+get_target_property(nexplay_sources nexplay SOURCES)
+list(REMOVE_ITEM nexplay_sources src/gui_main.cpp)
+add_executable(nexplay_ui_preview EXCLUDE_FROM_ALL
+    tests/StudioLayoutPreview.cpp ${nexplay_sources})
+target_compile_features(nexplay_ui_preview PRIVATE cxx_std_20)
+target_compile_definitions(nexplay_ui_preview PRIVATE
+    UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN WINVER=0x0A00 _WIN32_WINNT=0x0A00)
+target_include_directories(nexplay_ui_preview PRIVATE src third_party/nv-codec-headers/include/ffnvcodec)
+if(MSVC)
+    target_compile_options(nexplay_ui_preview PRIVATE /W4 /permissive- /utf-8)
+endif()
+get_target_property(nexplay_libraries nexplay LINK_LIBRARIES)
+target_link_libraries(nexplay_ui_preview PRIVATE ${nexplay_libraries} windowscodecs)
