@@ -162,6 +162,12 @@ void playbackTests(const std::filesystem::path &file, std::uint32_t firstId, dou
     std::reverse(tracks.begin(), tracks.end());
     preview.update(tracks, 1.5, false);
     require(preview.muted(0) && !preview.muted(1), "Reordering edits changed audio identity");
+    preview.update({tracks[0]}, 1.5, false);
+    require(preview.muted(0) && !preview.muted(1), "Delete muted or swapped the surviving track");
+    preview.update({}, 1.5, false);
+    require(preview.muted(0) && preview.muted(1), "Deleting every track left sound enabled");
+    preview.update(tracks, 1.5, false);
+    require(preview.muted(0) && !preview.muted(1), "Undo did not restore the right player");
     preview.update({tracks[0], tracks[0]}, 1.5, false);
     require(preview.muted(0) && preview.muted(1), "Ambiguous update must mute all players");
     preview.seek(2.5);

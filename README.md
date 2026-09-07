@@ -31,6 +31,8 @@ NexPlay to lekka nagrywarka powtórek dla Windows, korzystająca ze sprzętowego
 - usuwanie zaznaczonego fragmentu ze środka i składanie pozostałości w jeden klip,
 - wspólny timeline V1/A1–An z jedną skalą czasu, wyciszaniem i zakresem słyszalności ścieżek,
 - opcja połączenia końcowej edycji w jedną ścieżkę audio,
+- wspólne przycinanie obrazu i dźwięku, usuwanie ścieżek z montażu i cofanie usunięcia przez `Ctrl+Z`,
+- eksport z dekodowaniem NVDEC i kodowaniem NVENC na GPU oraz procentowym paskiem postępu,
 - ciemny interfejs studia z boczną nawigacją, panelem eksportu i konfigurowalnym akcentem,
 - responsywne okno: siatka klipów i timeline dopasowują się do dostępnego miejsca, bez rozciągania ikon i checkboxów,
 - maksymalizacja do obszaru roboczego Windows i przywracanie rozmiaru okna.
@@ -87,10 +89,15 @@ W odtwarzaczu można przewijać nagranie bez jego modyfikowania, przełączyć o
 
 - Kliknij obraz lub naciśnij `Spację`, aby zatrzymać albo wznowić film.
 - Kliknij podziałkę czasu, aby przewinąć bez zmiany zakresu klipu.
-- Przeciągnij uchwyty ścieżki **V1**, aby ustawić początek i koniec.
-- W panelu eksportu przełącz **Przycinanie brzegów** na **Wycinanie fragmentu**, aby usunąć zaznaczony środek i połączyć pozostałości w jeden plik.
-- Checkboxy **A1–An** wyciszają ścieżki w podglądzie i wykluczają je z eksportu; uchwyty na ścieżkach określają ich słyszalny zakres również podczas odsłuchu. Wyciszenia pozostają aktywne na pełnym ekranie. Przewiń listę kółkiem myszy, aby zobaczyć kolejne ścieżki.
-- Wpisz nazwę nowego pliku, opcjonalnie włącz **Jedna ścieżka audio** i wybierz **Eksportuj klip**. Oryginał pozostaje bez zmian.
+- Przeciągnij uchwyty **V1**, aby ustawić początek i koniec obrazu **razem z audio**. Zakresy dźwięku na timeline i w odsłuchu podążają za obrazem; wcześniejsze indywidualne przycięcia audio pozostają zachowane.
+- W panelu eksportu przełącz **Przycinanie brzegów** na **Wycinanie fragmentu**, aby usunąć zaznaczony środek z obrazu i wszystkich ścieżek audio oraz połączyć pozostałości w jeden plik.
+- Checkboxy **A1–An** wyciszają ścieżki w podglądzie i eksporcie, zachowując cichą ścieżkę w pliku. **Kosz obok nazwy** usuwa ścieżkę z timeline i eksportowanego MP4. `Ctrl+Z` przywraca ostatnio usuniętą ścieżkę (poza polem nazwy pliku). Oryginalne nagranie pozostaje nietknięte.
+- Uchwyty audio określają dodatkowy słyszalny zakres wewnątrz cięcia V1, również na pełnym ekranie. Przewiń listę kółkiem myszy, aby zobaczyć kolejne ścieżki.
+- Wpisz nazwę nowego pliku, opcjonalnie włącz **Jedna ścieżka audio** i wybierz **Eksportuj · GPU**. Oryginał pozostaje bez zmian.
+
+Przycisk **Eksportuj · GPU** pokazuje rzeczywisty procent postępu FFmpeg oraz pasek. Do zakończenia zapisu i zatwierdzenia pliku postęp nie przekracza 99%; 100% oznacza gotowy plik. Nie można przypadkowo uruchomić drugiego eksportu, gdy pierwszy trwa.
+
+Obraz jest dekodowany przez **NVDEC** i kodowany przez **NVENC**, z klatkami w pamięci GPU. Dźwięk AAC, miksowanie i obsługa pliku nadal wykorzystują CPU. Wymagana jest karta NVIDIA i FFmpeg z NVDEC/NVENC; błąd eksportu nie uruchamia cichego kodowania programowego. Przy aktualizacji własnego buildu trzeba zaktualizować również katalog `tools/ffmpeg/bin`, nie tylko plik EXE.
 
 ## Budowanie ze źródeł
 
@@ -155,6 +162,12 @@ cmake --build --preset windows-x64-release --target nexplay_ui_preview
 
 Podglądy zawierają dane testowe. Narzędzie nie otwiera okna, nie nagrywa ekranu i nie instaluje skrótów. Nie zastępuje ręcznej kontroli odtwarzania ani systemowych animacji okna.
 
+Opcjonalne testy eksportu wymagają GPU NVIDIA i FFmpeg z NVDEC/NVENC. Tworzą własne syntetyczne nagrania bez dostępu do ekranu, mikrofonu ani klipów użytkownika. Sprawdzają zawartość i czas audio po przycięciu, wycięciu środka, usunięciu, wyciszeniu i miksowaniu ścieżek oraz postęp eksportu:
+
+```powershell
+./out/build/windows-x64-release/Release/nexplay_ui_preview.exe ./out/editor-export-checks --export-tests
+```
+
 Opcjonalny argument `--window-frame` uruchamia dodatkowo test geometrii ramki na osobnym, niewidocznym oknie, bez uruchamiania nagrywarki. Zamiast tej opcji można podać ścieżkę do krótkiego pliku testowego MP4 (co najmniej 61 klatek), aby porównać miniatury z pełnym dekodowaniem przez FFmpeg.
 
 Podgląd zawiera też plik `save-toasts.png` z powiadomieniami zapisu. Opcjonalny cel
@@ -182,8 +195,8 @@ Pierwszy skrypt buduje ograniczony do potrzeb NexPlay wariant FFmpeg 9.0.1 z ofi
 Tag w formacie `vX.Y.Z`, zgodny z wersją w `CMakeLists.txt`, uruchamia budowanie i testy, a następnie publikuje instalator, ZIP, odpowiadające źródła FFmpeg i SHA256 na GitHubie:
 
 ```powershell
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 Przepływ można ponowić w **Actions**, podając istniejący tag. Istniejące publiczne wydanie nie jest automatycznie nadpisywane. Zwykły CI udostępnia sam plik EXE jako artefakt deweloperski; pełna paczka użytkowa znajduje się w Releases.

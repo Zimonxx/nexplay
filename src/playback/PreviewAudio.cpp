@@ -96,11 +96,13 @@ void PreviewAudio::update(const std::vector<AudioSelection> &tracks, double seco
                           bool playing) noexcept {
     // Edits are keyed by the same identity as decoding, never by list position.
     const bool valid =
-        tracks.size() == players_.size() &&
-        std::all_of(players_.begin(), players_.end(), [&](const TrackPlayer &player) {
-            return std::count_if(tracks.begin(), tracks.end(), [&](const AudioSelection &edit) {
+        std::all_of(tracks.begin(), tracks.end(), [&](const AudioSelection &edit) {
+            return std::count_if(tracks.begin(), tracks.end(), [&](const AudioSelection &other) {
+                       return edit.trackId == other.trackId;
+                   }) == 1 &&
+                   std::any_of(players_.begin(), players_.end(), [&](const TrackPlayer &player) {
                        return edit.trackId == player.trackId;
-                   }) == 1;
+                   });
         });
     if (!valid) {
         for (auto &track : players_) {
@@ -114,7 +116,7 @@ void PreviewAudio::update(const std::vector<AudioSelection> &tracks, double seco
         const auto edit =
             std::find_if(tracks.begin(), tracks.end(),
                          [&](const AudioSelection &item) { return item.trackId == track.trackId; });
-        const bool mute = !audible(*edit, seconds);
+        const bool mute = edit == tracks.end() || !audible(*edit, seconds);
         if (track.muted != mute && SUCCEEDED(track.player->SetMute(mute)))
             track.muted = mute;
     }

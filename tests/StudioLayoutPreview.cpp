@@ -1,6 +1,7 @@
 // Render the actual UI offscreen, without capture, hooks, registry writes or a window.
 #include "../src/gui_main.cpp"
 #include <iostream>
+#include "EditorExportChecks.h"
 
 namespace {
 // An isolated, never-shown test window. Route only non-client messages through
@@ -190,6 +191,10 @@ void validateLayout() {
         if (!containsRect(editorAudioRowsRect, r) || r.left != editorTimelineRect.left ||
             r.right != editorTimelineRect.right)
             throw std::runtime_error("Audio and video time axes are misaligned");
+        const auto remove = editorAudioDeleteRect(i);
+        if (!containsRect(editorAudioRowsRect, remove) || remove.right >= r.left ||
+            remove.right - remove.left != 28 || remove.bottom - remove.top != 28)
+            throw std::runtime_error("Audio delete button overlaps or stretches");
     }
     if (std::abs((accentPlaneRect.right - accentPlaneRect.left) -
                  (accentPlaneRect.bottom - accentPlaneRect.top)) > 0.01F)
@@ -232,6 +237,10 @@ void validateHitTargets(AppState &state) {
         checkTarget(editorNameRect, HitTarget::editorName);
         checkTarget(editorFullscreenRect, HitTarget::editorFullscreen);
         checkTarget(editorSaveRect, HitTarget::editorSave);
+        state.editorExporting = true;
+        if (hitTest(state, editorSaveRect.left + 30, editorSaveRect.top + 16) == HitTarget::editorSave)
+            throw std::runtime_error("Export button allowed a duplicate job");
+        state.editorExporting = false;
     } else {
         checkTarget(openClipsRect, HitTarget::openClips);
         for (int i = 0;
@@ -251,8 +260,11 @@ int wmain(int argc, wchar_t **argv) {
         return 3;
     int result = 0;
     try {
+        validateEditorTrackEdits();
         if (argc == 3) {
-            if (std::wstring(argv[2]) == L"--window-frame")
+            if (std::wstring(argv[2]) == L"--export-tests")
+                validateEditorExports(std::filesystem::path(argv[1]) / L"export-fixtures");
+            else if (std::wstring(argv[2]) == L"--window-frame")
                 validateNativeFrame();
             else
                 validateFrameDecoder(argv[2]);
@@ -325,6 +337,20 @@ int wmain(int argc, wchar_t **argv) {
                 savePng(state, bitmap.Get(), folder / name);
             }
             if (size.cx == 1240) {
+                state.page = Page::editor;
+                state.trimStart = 2;
+                state.trimEnd = 8;
+                state.editorExporting = true;
+                state.editorExportPercent = 42;
+                for (bool cut : {false, true}) {
+                    state.cutEditorSelection = cut;
+                    state.renderTarget->BeginDraw();
+                    state.renderTarget->Clear(background);
+                    drawScene(state);
+                    check(state.renderTarget->EndDraw());
+                    savePng(state, bitmap.Get(), folder / (cut ? L"editor-cut-export.png" : L"editor-trim-export.png"));
+                }
+                state.editorExporting = false;
                 for (bool audioDialog : {false, true}) {
                     state.page = audioDialog ? Page::replay : Page::clips;
                     state.clipContextMenuOpen = !audioDialog;

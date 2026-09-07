@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-project(NexPlay VERSION 0.2.0 LANGUAGES CXX RC)
+project(NexPlay VERSION 0.2.1 LANGUAGES CXX RC)
 
 find_program(NEXPLAY_POWERSHELL NAMES pwsh powershell REQUIRED)
 set(NEXPLAY_ICON_FILE "${CMAKE_CURRENT_BINARY_DIR}/brand/nexplay.ico")
@@ -123,6 +123,14 @@ target_link_libraries(nexplay_replay_test PRIVATE
 )
 
 enable_testing()
+
+add_executable(timeline_edit_tests tests/TimelineEditTests.cpp)
+target_compile_features(timeline_edit_tests PRIVATE cxx_std_20)
+target_include_directories(timeline_edit_tests PRIVATE src)
+if(MSVC)
+    target_compile_options(timeline_edit_tests PRIVATE /W4 /permissive- /utf-8)
+endif()
+add_test(NAME timeline_edit COMMAND timeline_edit_tests)
 
 add_executable(save_workflow_tests tests/SaveWorkflowTests.cpp src/app/FfmpegProgress.cpp)
 target_compile_features(save_workflow_tests PRIVATE cxx_std_20)

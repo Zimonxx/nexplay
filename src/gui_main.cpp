@@ -6,6 +6,8 @@
 #include "playback/ThumbnailSelection.h"
 #include "platform/windows/MediaTools.h"
 #include "resources/resource.h"
+#include "editing/TimelineEdit.h"
+#include "app/FfmpegProgress.h"
 
 #include <Windows.h>
 #include <windowsx.h>
@@ -53,6 +55,7 @@ constexpr UINT clearEditorFocusMessage = WM_APP + 7;
 constexpr UINT togglePlaybackMessage = WM_APP + 8;
 constexpr UINT saveProgressMessage = WM_APP + 9;
 constexpr UINT activateInstanceMessage = WM_APP + 10;
+constexpr UINT editorProgressMessage = WM_APP + 11;
 constexpr int saveHotkeyId = 1;
 constexpr int stopHotkeyId = 2;
 float windowWidth = 1240.0F;
@@ -306,6 +309,11 @@ struct EditorAudioTrack final {
     std::uint32_t trackId{};
 };
 
+struct RemovedEditorAudioTrack {
+    std::size_t index{};
+    EditorAudioTrack track;
+};
+
 struct ClipPreview final {
     double duration{};
     double framesPerSecond{};
@@ -376,11 +384,16 @@ struct AppState final {
     double trimStart{};
     double trimEnd{};
     std::vector<EditorAudioTrack> editorAudioTracks;
+    std::vector<RemovedEditorAudioTrack> removedEditorAudioTracks;
     nexplay::playback::PreviewAudio previewAudio;
     int editorAudioScroll{};
     int activeEditorAudioTrack{-1};
     bool mergeEditorAudio{};
     bool cutEditorSelection{};
+    bool editorExporting{};
+    unsigned int editorExportId{};
+    int editorExportPercent{};
+    std::filesystem::path editorExportClip;
     DragHandle dragHandle{DragHandle::none};
     bool playing{};
     bool fullscreen{};
@@ -1112,6 +1125,7 @@ struct EditorResult final {
     bool success{};
     std::filesystem::path output;
     std::wstring message;
+    unsigned int exportId{};
 };
 
 [[nodiscard]] EditorResult exportEditedClip(
@@ -1122,7 +1136,8 @@ struct EditorResult final {
     const std::vector<EditorAudioTrack>& audioTracks,
     const bool mergeAudio,
     const bool cutSelection,
-    const double fullDuration) {
+    const double fullDuration,
+    const std::function<void(int)>& progress = {}) {
     const double selectedDuration = end - start;
     if (!validClipName(outputName) || selectedDuration < 0.05 ||
         (!cutSelection && selectedDuration < 0.1) ||
@@ -1138,26 +1153,27 @@ struct EditorResult final {
     const auto temporary = input.parent_path() /
         (L".nexplay-edit-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
          std::to_wstring(GetTickCount64()) + L".mp4");
+    struct ExportTemporary {
+        std::filesystem::path path;
+        ~ExportTemporary() { std::error_code error; std::filesystem::remove(path, error); }
+    } cleanup{temporary};
 
-    struct KeptSegment final { double start; double end; };
-    std::vector<KeptSegment> keptSegments;
-    if (cutSelection) {
-        if (start > 0.001) keptSegments.push_back({0.0, start});
-        if (end < fullDuration - 0.001) keptSegments.push_back({end, fullDuration});
-    } else {
-        keptSegments.push_back({start, end});
-    }
+    const auto keptSegments =
+        nexplay::editing::TimelineEdit{start, end, fullDuration, cutSelection}.keptRanges();
     if (keptSegments.empty()) return {false, {}, L"Nie można wyciąć całego klipu."};
     double outputDuration{};
     for (const auto& segment : keptSegments) outputDuration += segment.end - segment.start;
 
     std::vector<std::wstring> arguments{
         L"ffmpeg.exe", L"-hide_banner", L"-loglevel", L"error", L"-y",
+        L"-nostdin", L"-nostats", L"-stats_period", L"0.1", L"-progress", L"pipe:1",
+        L"-hwaccel", L"cuda", L"-hwaccel_output_format", L"cuda",
         L"-i", quoteProcessArgument(input.wstring()),
     };
     std::vector<const EditorAudioTrack*> includedTracks;
     for (const auto& track : audioTracks) {
-        if (track.included) includedTracks.push_back(&track);
+        // Muting preserves a silent stream. Only deleting removes it from this list.
+        includedTracks.push_back(&track);
     }
 
     std::wstring filters;
@@ -1200,10 +1216,13 @@ struct EditorResult final {
                 L"[0:" + std::to_wstring(track.streamIndex) +
                 L"]atrim=start=" + secondsArgument(segment.start) +
                 L":end=" + secondsArgument(segment.end) +
-                L",asetpts=PTS-STARTPTS,volume=0:enable='lt(t," +
-                secondsArgument(audibleStart) + L")+gte(t," +
-                secondsArgument(audibleEnd) + L")',apad=whole_dur=" +
-                secondsArgument(duration) + L"[a" + std::to_wstring(trackIndex) +
+                L",asetpts=PTS-STARTPTS," +
+                (track.included ? L"volume=0:enable='lt(t," +
+                    secondsArgument(audibleStart) + L")+gte(t," +
+                    secondsArgument(audibleEnd) + L")'" : L"volume=0") +
+                L",apad=whole_dur=" +
+                secondsArgument(duration) + L",atrim=duration=" + secondsArgument(duration) +
+                L"[a" + std::to_wstring(trackIndex) +
                 L"seg" + std::to_wstring(segmentIndex) + L"]");
         }
         if (keptSegments.size() == 1) {
@@ -1265,17 +1284,20 @@ struct EditorResult final {
         L"-t", secondsArgument(outputDuration), L"-movflags", L"+faststart",
         quoteProcessArgument(temporary.wstring()),
     });
-    if (runHiddenProcess(arguments) != 0) {
+    if (nexplay::app::runFfmpegProgress(arguments, outputDuration, progress) != 0) {
         std::error_code cleanupError;
         std::filesystem::remove(temporary, cleanupError);
-        return {false, {}, L"FFmpeg nie mógł wyeksportować klipu."};
+        return {false, {}, L"Eksport GPU nie powiódł się. Sprawdź klip, sterownik NVIDIA i aktualne narzędzia FFmpeg z NVDEC/NVENC. Nie przełączono na CPU."};
     }
+    if (!std::filesystem::is_regular_file(temporary) || std::filesystem::file_size(temporary) == 0)
+        return {false, {}, L"Eksport nie utworzył poprawnego pliku."};
     std::error_code error;
     std::filesystem::rename(temporary, output, error);
     if (error) {
         std::filesystem::remove(temporary, error);
         return {false, {}, L"Nie można zapisać pliku wynikowego."};
     }
+    if (progress) progress(100);
     return {true, output, L"Gotowe"};
 }
 
@@ -2107,6 +2129,20 @@ void drawEditorName(AppState &state) {
     const float top = editorAudioRowsRect.top + visibleRow * editorAudioRowHeight;
     return {editorTimelineRect.left, top, editorTimelineRect.right, top + 36};
 }
+[[nodiscard]] Rect editorAudioDeleteRect(const int visibleRow) {
+    const auto row = editorAudioTimelineRect(visibleRow);
+    return {editorTimelineRect.left - 34, row.top + 4, editorTimelineRect.left - 6, row.top + 32};
+}
+[[nodiscard]] nexplay::editing::TimelineEdit editorTimelineEdit(const AppState& state) {
+    return {state.trimStart, state.trimEnd, state.editorDuration, state.cutEditorSelection};
+}
+[[nodiscard]] nexplay::editing::TimeRange editorAudioBounds(
+    const AppState& state, const EditorAudioTrack& track) {
+    const auto ranges = editorTimelineEdit(state).audioRanges(track.start, track.end);
+    if (!ranges.empty()) return {ranges.front().start, ranges.back().end};
+    const double anchor = std::clamp(track.start, 0.0, std::max(0.0, state.editorDuration));
+    return {anchor, anchor};
+}
 void drawEditorMergeToggle(AppState &state) {
     drawText(state, L"Jedna ścieżka audio",
              {editorMergeAudioRect.left, editorMergeAudioRect.top + 11,
@@ -2131,7 +2167,7 @@ void drawUnifiedTimeline(AppState &state) {
     const float top = timelinePanelRect.top;
     drawText(state, L"Sekwencja", {contentLeft + 18, top + 16, contentLeft + 200, top + 40},
              state.buttonFormat.Get(), white);
-    drawText(state, L"Kliknij: przewiń  /  Uchwyty: przytnij",
+    drawText(state, L"V1 + audio: wspólne cięcie  /  Kosz: usuń ścieżkę",
              {contentLeft + 208, top + 17, contentRight - 18, top + 40}, state.smallFormat.Get(),
              muted);
     rule(state, contentLeft, top + 48, contentRight);
@@ -2187,21 +2223,29 @@ void drawUnifiedTimeline(AppState &state) {
                  {contentLeft + 50, r.top + 10, contentLeft + 80, r.bottom},
                  state.smallFormat.Get(), muted);
         drawText(state, track.name,
-                 {contentLeft + 86, r.top + 9, editorTimelineRect.left - 12, r.bottom},
+                 {contentLeft + 86, r.top + 9, editorTimelineRect.left - 40, r.bottom},
                  state.smallFormat.Get(), track.included ? white : muted);
+        const auto remove = editorAudioDeleteRect(v);
+        drawIcon(state, Icon::trash, remove.left + 5, remove.top + 5, muted, 18);
         fillRounded(state, r, 4, field);
-        const Rect audioRange{timeX(track.start), r.top, timeX(track.end), r.bottom};
         const D2D1_COLOR_F audioColor{0.20F, 0.65F, 0.54F, track.included ? 0.22F : 0.06F};
-        fillRounded(state, audioRange, 4, audioColor);
-        if (track.included) {
-            strokeRounded(state, audioRange, 4, {0.24F, 0.58F, 0.50F, 1});
-            handle(audioRange.left, r);
-            handle(audioRange.right, r);
+        for (const auto audibleRange : editorTimelineEdit(state).audioRanges(track.start, track.end)) {
+            const Rect audioRange{timeX(audibleRange.start), r.top, timeX(audibleRange.end), r.bottom};
+            fillRounded(state, audioRange, 4, audioColor);
+            if (track.included) strokeRounded(state, audioRange, 4, {0.24F, 0.58F, 0.50F, 1});
+            if (audioRange.right - audioRange.left > 160)
+                drawText(state, track.included ? track.name : L"Wyciszona",
+                         {audioRange.left + 12, r.top + 10, audioRange.right - 12, r.bottom},
+                         state.smallFormat.Get(), track.included ? white : muted);
         }
-        if (audioRange.right - audioRange.left > 160)
-            drawText(state, track.included ? track.name : L"Wyciszona",
-                     {audioRange.left + 12, r.top + 10, audioRange.right - 12, r.bottom},
-                     state.smallFormat.Get(), track.included ? white : muted);
+        if (state.cutEditorSelection)
+            fillRounded(state, {range.left, r.top, range.right, r.bottom}, 4,
+                        {red.r, red.g, red.b, 0.12F});
+        const auto bounds = editorAudioBounds(state, track);
+        if (track.included && bounds.duration() > 0) {
+            handle(timeX(bounds.start), r);
+            handle(timeX(bounds.end), r);
+        }
     }
     if (state.editorAudioTracks.empty())
         drawText(state, L"Brak ścieżek audio",
@@ -2227,8 +2271,21 @@ void drawEditorPage(AppState &state) {
     drawButton(state, editorBackRect, L"←  Biblioteka", HitTarget::editorBack, false);
     drawText(state, L"Montaż", {editorBackRect.right + 18, 80, contentRight - 200, 114},
              state.headingFormat.Get(), white);
-    drawButton(state, editorSaveRect, L"Eksportuj klip", HitTarget::editorSave, true,
+    const auto exportLabel = state.editorExporting
+        ? (state.editorExportPercent >= 99 ? std::wstring(L"Finalizuję · 99%")
+            : L"Eksport GPU · " + std::to_wstring(state.editorExportPercent) + L"%")
+        : std::wstring(L"Eksportuj · GPU");
+    drawButton(state, editorSaveRect, exportLabel, HitTarget::editorSave, true,
                state.editorDuration > 0);
+    if (state.editorExporting) {
+        const Rect bar{editorSaveRect.left, editorSaveRect.bottom + 5,
+                       editorSaveRect.right, editorSaveRect.bottom + 9};
+        fillRounded(state, bar, 2, field);
+        if (state.editorExportPercent > 0)
+            fillRounded(state, {bar.left, bar.top,
+                bar.left + (bar.right - bar.left) * state.editorExportPercent / 100.0F, bar.bottom},
+                2, primaryHover);
+    }
     panel(state, previewPanelRect);
     panel(state, inspectorRect);
     drawText(state, L"PODGLĄD", {previewPanelRect.left + 16, 144, previewPanelRect.right - 16, 164},
@@ -2246,7 +2303,7 @@ void drawEditorPage(AppState &state) {
                       editorPlayRect.bottom},
                      state.smallFormat.Get(), muted);
     const float x = inspectorRect.left + 16;
-    drawText(state, L"Eksport", {x, 152, contentRight - 16, 178}, state.headingFormat.Get(), white);
+    drawText(state, L"Eksport · NVENC", {x, 152, contentRight - 16, 178}, state.headingFormat.Get(), white);
     drawText(state, L"Nazwa nowego pliku", {x, 189, contentRight - 16, 213},
              state.smallFormat.Get(), muted);
     drawEditorName(state);
@@ -2257,7 +2314,7 @@ void drawEditorPage(AppState &state) {
     if (inspectorRect.bottom > 418)
         drawText(state,
                  state.cutEditorSelection ? L"Czerwony zakres zostanie usunięty."
-                                          : L"Uchwyty V1 określają początek i koniec.",
+                                          : L"Uchwyty V1 przycinają też dźwięk.",
                  {x, 378, contentRight - 16, 414}, state.smallFormat.Get(), muted);
     drawUnifiedTimeline(state);
 }
@@ -2645,6 +2702,7 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
     state.trimStart = 0;
     state.trimEnd = 0;
     state.editorAudioTracks = probeEditorAudioTracks(clip);
+    state.removedEditorAudioTracks.clear();
     state.editorAudioScroll = 0;
     state.activeEditorAudioTrack = -1;
     state.mergeEditorAudio = false;
@@ -2680,9 +2738,30 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
 void updatePreviewAudio(AppState& state) {
     std::vector<nexplay::playback::AudioSelection> tracks;
     for (const auto& track : state.editorAudioTracks) {
-        tracks.push_back({track.included, track.start, track.end, track.trackId});
+        const auto bounds = editorAudioBounds(state, track);
+        tracks.push_back({track.included && editorTimelineEdit(state).contains(state.playPosition),
+                          bounds.start, bounds.end, track.trackId});
     }
     state.previewAudio.update(tracks, state.playPosition, state.playing);
+}
+
+void removeEditorAudioTrack(AppState& state, const std::size_t index) {
+    if (index >= state.editorAudioTracks.size()) return;
+    state.removedEditorAudioTracks.push_back({index, state.editorAudioTracks[index]});
+    state.editorAudioTracks.erase(state.editorAudioTracks.begin() + index);
+    state.activeEditorAudioTrack = -1;
+    state.editorAudioScroll = std::min(state.editorAudioScroll,
+        std::max(0, static_cast<int>(state.editorAudioTracks.size()) - editorVisibleTracks));
+    updatePreviewAudio(state);
+}
+
+void restoreEditorAudioTrack(AppState& state) {
+    if (state.removedEditorAudioTracks.empty()) return;
+    auto removed = std::move(state.removedEditorAudioTracks.back());
+    state.removedEditorAudioTracks.pop_back();
+    const auto index = std::min(removed.index, state.editorAudioTracks.size());
+    state.editorAudioTracks.insert(state.editorAudioTracks.begin() + index, std::move(removed.track));
+    updatePreviewAudio(state);
 }
 
 void updateEditorPlayback(AppState& state) {
@@ -2788,11 +2867,14 @@ void moveEditorAudioHandle(AppState& state, const float x) {
         0.0, state.editorDuration);
     auto& track = state.editorAudioTracks[
         static_cast<std::size_t>(state.activeEditorAudioTrack)];
+    const auto bounds = editorAudioBounds(state, track);
+    const double minimum = state.cutEditorSelection ? 0.0 : state.trimStart;
+    const double maximum = state.cutEditorSelection ? state.editorDuration : state.trimEnd;
     if (state.dragHandle == DragHandle::audioStart) {
-        track.start = std::clamp(position, 0.0, std::max(0.0, track.end - 0.05));
+        track.start = std::clamp(position, minimum, std::max(minimum, bounds.end - 0.05));
         seekEditor(state, track.start);
     } else if (state.dragHandle == DragHandle::audioEnd) {
-        track.end = std::clamp(position, track.start + 0.05, state.editorDuration);
+        track.end = std::clamp(position, std::min(maximum, bounds.start + 0.05), maximum);
         seekEditor(state, track.end);
     }
 }
@@ -3121,6 +3203,7 @@ void openClipsFolder(const HWND window) {
 }
 
 void exportEditor(const HWND window, AppState& state) {
+    if (state.editorExporting) return;
     if (state.editorDuration <= 0.0 || !validClipName(state.editorName)) {
         setStatus(window, state, L"Błąd: wpisz poprawną nazwę klipu");
         return;
@@ -3145,14 +3228,26 @@ void exportEditor(const HWND window, AppState& state) {
     const bool mergeAudio = state.mergeEditorAudio;
     const bool cutSelection = state.cutEditorSelection;
     const double fullDuration = state.editorDuration;
+    state.editorExporting = true;
+    state.editorExportPercent = 0;
+    state.editorExportClip = input;
+    const auto exportId = ++state.editorExportId;
     state.editorJobs.emplace_back([window, input, name, start, end,
-                                   audioTracks, mergeAudio, cutSelection, fullDuration] {
-        auto* result = new EditorResult(
-            exportEditedClip(input, name, start, end, audioTracks, mergeAudio,
-                             cutSelection, fullDuration));
-        if (!PostMessageW(window, editorDoneMessage, 0, reinterpret_cast<LPARAM>(result))) {
-            delete result;
+                                   audioTracks, mergeAudio, cutSelection, fullDuration, exportId] {
+        auto result = std::make_unique<EditorResult>();
+        try {
+            *result = exportEditedClip(input, name, start, end, audioTracks, mergeAudio,
+                cutSelection, fullDuration, [window, exportId](int percent) {
+                    PostMessageW(window, editorProgressMessage, exportId, percent);
+                });
+        } catch (const std::exception& error) {
+            result->message = utf8ToWide(error.what());
+        } catch (...) {
+            result->message = L"Nieoczekiwany błąd eksportu GPU.";
         }
+        result->exportId = exportId;
+        if (PostMessageW(window, editorDoneMessage, 0, reinterpret_cast<LPARAM>(result.get())))
+            result.release();
     });
 }
 
@@ -3195,7 +3290,7 @@ void exportEditor(const HWND window, AppState& state) {
         }
         if (editorPlayRect.contains(x, y)) return HitTarget::editorPlay;
         if (editorFullscreenRect.contains(x, y)) return HitTarget::editorFullscreen;
-        if (editorSaveRect.contains(x, y)) return HitTarget::editorSave;
+        if (editorSaveRect.contains(x, y) && !state.editorExporting) return HitTarget::editorSave;
         if (editorNameRect.contains(x, y)) return HitTarget::editorName;
     } else if (state.page == Page::settings) {
         if (autostartRect.contains(x, y)) return HitTarget::autostartToggle;
@@ -3963,7 +4058,13 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
         const int index = static_cast<int>((y-editorAudioRowsRect.top)/editorAudioRowHeight) + state.editorAudioScroll;
         if (index >= 0 && index < static_cast<int>(state.editorAudioTracks.size())) {
             auto& track = state.editorAudioTracks[static_cast<std::size_t>(index)];
-            track.included = !track.included;
+            if (editorAudioDeleteRect(index - state.editorAudioScroll).contains(x, y)) {
+                const auto name = track.name;
+                removeEditorAudioTrack(state, static_cast<std::size_t>(index));
+                setStatus(window, state, L"Usunięto ścieżkę: " + name + L" · Ctrl+Z: przywróć. Oryginał bez zmian.");
+            } else if (x < contentLeft + 44) {
+                track.included = !track.included;
+            }
             updatePreviewAudio(state);
             InvalidateRect(window, nullptr, FALSE);
         }
@@ -4212,15 +4313,16 @@ LRESULT CALLBACK windowProcedure(
                 state->editorAudioTracks[static_cast<std::size_t>(index)].included) {
                 const Rect timeline = editorAudioTimelineRect(visible);
                 const auto& track = state->editorAudioTracks[static_cast<std::size_t>(index)];
+                const auto bounds = editorAudioBounds(*state, track);
                 const float startX = timeline.left +
-                    static_cast<float>(track.start / state->editorDuration) *
+                    static_cast<float>(bounds.start / state->editorDuration) *
                         (timeline.right - timeline.left);
                 const float endX = timeline.left +
-                    static_cast<float>(track.end / state->editorDuration) *
+                    static_cast<float>(bounds.end / state->editorDuration) *
                         (timeline.right - timeline.left);
                 const float clickX = logical.x;
-                const bool grabStart=std::abs(clickX-startX)<=10;
-                const bool grabEnd=std::abs(clickX-endX)<=10;
+                const bool grabStart=bounds.duration()>0 && std::abs(clickX-startX)<=10;
+                const bool grabEnd=bounds.duration()>0 && std::abs(clickX-endX)<=10;
                 state->activeEditorAudioTrack = grabStart||grabEnd ? index : -1;
                 state->dragHandle = grabStart ? DragHandle::audioStart :
                     (grabEnd ? DragHandle::audioEnd : DragHandle::playhead);
@@ -4385,6 +4487,14 @@ LRESULT CALLBACK windowProcedure(
             }
             if (state->page == Page::editor &&
                 state->activeField != HitTarget::editorName) {
+                if (wParam == 'Z' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+                    if (!state->removedEditorAudioTracks.empty()) {
+                        restoreEditorAudioTrack(*state);
+                        setStatus(window, *state, L"Przywrócono ostatnio usuniętą ścieżkę audio");
+                        InvalidateRect(window, nullptr, FALSE);
+                    }
+                    return 0;
+                }
                 if (wParam == VK_SPACE) {
                     toggleEditorPlayback(*state);
                     InvalidateRect(window, nullptr, FALSE);
@@ -4553,19 +4663,36 @@ LRESULT CALLBACK windowProcedure(
             if (clipSaved || state->page == Page::clips) refreshClips(window, *state);
         }
         return 0;
-    case editorDoneMessage:
-        if (state != nullptr) {
-            std::unique_ptr<EditorResult> result(reinterpret_cast<EditorResult*>(lParam));
+    case editorProgressMessage:
+        if (state && state->editorExporting && wParam == state->editorExportId) {
+            // 100% is reserved for the successful completion/file-finalization event.
+            state->editorExportPercent = std::max(state->editorExportPercent,
+                std::clamp(static_cast<int>(lParam), 0, 99));
+            setStatus(window, *state, L"Eksport GPU · " +
+                std::to_wstring(state->editorExportPercent) + L"% · " +
+                state->editorExportClip.filename().wstring());
+            InvalidateRect(window, nullptr, FALSE);
+        }
+        return 0;
+    case editorDoneMessage: {
+        std::unique_ptr<EditorResult> result(reinterpret_cast<EditorResult*>(lParam));
+        if (state && result && result->exportId == state->editorExportId) {
+            state->editorExporting = false;
+            state->editorJobs.clear();
             if (result->success) {
-                closeEditorPlayer(*state);
-                state->page = Page::clips;
+                state->editorExportPercent = 100;
+                if (state->page == Page::editor && state->selectedClip == state->editorExportClip) {
+                    closeEditorPlayer(*state);
+                    state->page = Page::clips;
+                }
                 refreshClips(window, *state);
-                setStatus(window, *state, L"Zapisano: " + result->output.filename().wstring());
+                setStatus(window, *state, L"Eksport 100% · Zapisano: " + result->output.filename().wstring());
             } else {
                 setStatus(window, *state, L"Błąd: " + result->message);
             }
         }
         return 0;
+    }
     case trayMessage:
         if (state != nullptr && (lParam == WM_LBUTTONUP || lParam == WM_LBUTTONDBLCLK)) {
             if (state->trayMenuWindow != nullptr) ShowWindow(state->trayMenuWindow, SW_HIDE);
@@ -4621,6 +4748,12 @@ LRESULT CALLBACK windowProcedure(
             saveAccentColor(*state);
             closeEditorPlayer(*state);
             state->engine.stop();
+            // Finish owned exports before the HWND can be recycled; release queued results.
+            for (auto& job : state->editorJobs) if (job.joinable()) job.join();
+            state->editorJobs.clear();
+            MSG pendingEditor{};
+            while (PeekMessageW(&pendingEditor, window, editorDoneMessage, editorDoneMessage, PM_REMOVE))
+                delete reinterpret_cast<EditorResult*>(pendingEditor.lParam);
             state->saveToasts.close();
             MSG pendingSave{};
             while (PeekMessageW(&pendingSave, window, saveProgressMessage, saveProgressMessage,
