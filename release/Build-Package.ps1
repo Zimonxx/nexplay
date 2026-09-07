@@ -21,6 +21,13 @@ try {
     if ($configuration -notmatch '--disable-gpl' -or $configuration -notmatch '--disable-nonfree' -or $license -notmatch 'Lesser General Public License') {
         throw 'Expected the reviewed LGPL FFmpeg build'
     }
+    # Check compiled capabilities without requiring a GPU on the packaging machine.
+    foreach ($codec in @('h264', 'hevc')) {
+        $decoder = (& "$FFmpegDirectory/bin/ffmpeg.exe" -hide_banner -h "decoder=$codec" 2>&1 | Out-String)
+        if ($LASTEXITCODE -ne 0 -or $decoder -notmatch 'Supported hardware devices:[^\r\n]*\bcuda\b') {
+            throw "FFmpeg is missing $codec NVDEC decoding; rebuild with release/Build-FFmpeg.ps1"
+        }
+    }
     # Fresh staging prevents obsolete files from leaking into a release.
     $stage = Join-Path $root ("out/package-stage-" + [guid]::NewGuid().ToString('N'))
     $package = Join-Path $stage 'NexPlay'

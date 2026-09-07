@@ -16,7 +16,8 @@ cd "$build"
     --enable-shared --disable-static --disable-debug --disable-doc \
     --disable-autodetect --disable-network --disable-gpl --disable-nonfree \
     --disable-everything --enable-ffmpeg --enable-ffprobe --disable-ffplay \
-    --enable-ffnvcodec --enable-nvenc \
+    --enable-ffnvcodec --enable-nvenc --enable-nvdec \
+    --enable-hwaccel=h264_nvdec,hevc_nvdec \
     --enable-protocol=file,pipe \
     --enable-demuxer=mov,h264,hevc,pcm_s16le,image2,image2pipe,wav,matroska \
     --enable-muxer=mp4,mov,image2,image2pipe,null,pcm_s16le,adts,rawvideo,h264,wav \
