@@ -8,6 +8,7 @@
 #include "resources/resource.h"
 #include "editing/TimelineEdit.h"
 #include "app/FfmpegProgress.h"
+#include "update/UpdateController.h"
 
 #include <Windows.h>
 #include <windowsx.h>
@@ -85,7 +86,7 @@ constexpr D2D1_COLOR_F muted = {0.565F, 0.604F, 0.659F, 1.0F};
 constexpr D2D1_COLOR_F green = {0.173F, 0.949F, 0.616F, 1.0F};
 constexpr D2D1_COLOR_F red = {1.0F, 0.286F, 0.376F, 1.0F};
 
-enum class Page { replay, clips, editor, settings };
+enum class Page { replay, clips, editor, settings, updates };
 enum class HitTarget {
     none,
     minimize,
@@ -114,6 +115,9 @@ enum class HitTarget {
     editorMergeAudio,
     editorCutMode,
     settingsPage,
+    updatesPage,
+    updateAction,
+    autoUpdateToggle,
     autostartToggle,
     autoBufferToggle,
     saveHotkey,
@@ -154,6 +158,8 @@ constexpr float editorAudioRowHeight = 46.0F;
 float contentRight = 1208;
 Rect minimizeRect, maximizeRect, closeRect;
 Rect replayNavRect, clipsNavRect, settingsNavRect;
+Rect updatesNavRect{12, 300, 196, 348};
+Rect updateActionRect, autoUpdateRect;
 Rect startRect, saveRect, refreshRect, microphoneRect, createAudioGroupRect;
 Rect audioGroupDialogRect, audioGroupNameRect, cancelAudioGroupRect, confirmAudioGroupRect;
 Rect openClipsRect, clipsListRect, durationFieldRect, resolutionFieldRect, fpsFieldRect, bitrateFieldRect;
@@ -176,6 +182,8 @@ void computeLayout(const float widthPixels, const float heightPixels) {
     windowWidth = widthPixels;
     windowHeight = heightPixels;
     contentRight = windowWidth - 32;
+    updateActionRect = {contentLeft + 24, 326, contentLeft + 314, 374};
+    autoUpdateRect = {contentLeft + 24, 453, contentRight - 24, 523};
     const float width = contentRight - contentLeft;
     minimizeRect = {windowWidth - 138, 0, windowWidth - 92, 44};
     maximizeRect = {windowWidth - 92, 0, windowWidth - 46, 44};
@@ -354,6 +362,11 @@ constexpr std::array resolutionPresets{
 };
 
 struct AppState final {
+    nexplay::update::Controller updater;
+    bool autoUpdates{true};
+    ULONGLONG nextUpdateCheck{GetTickCount64() + 15'000};
+    std::wstring notifiedUpdateVersion;
+    std::wstring displayedUpdatePhase;
     nexplay::app::RecorderEngine engine;
     Page page{Page::replay};
     HitTarget hover{HitTarget::none};
@@ -1573,6 +1586,7 @@ void drawButton(AppState &state, const Rect rectangle, const std::wstring &label
 }
 
 enum class Icon {
+    download,
     record,
     clips,
     settings,
@@ -1599,6 +1613,14 @@ void drawIcon(AppState &state, Icon icon, float x, float y, D2D1_COLOR_F color, 
             state.brush.Get(), 1.4F);
     };
     switch (icon) {
+    case Icon::download:
+        line(10, 2, 10, 12);
+        line(5, 8, 10, 13);
+        line(10, 13, 15, 8);
+        line(3, 14, 3, 18);
+        line(3, 18, 17, 18);
+        line(17, 18, 17, 14);
+        break;
     case Icon::record:
         state.renderTarget->DrawEllipse(D2D1::Ellipse({x + 10 * u, y + 10 * u}, 8 * u, 8 * u),
                                         state.brush.Get(), 1.5F);
@@ -1716,6 +1738,9 @@ void drawSidebar(AppState &state) {
     nav(replayNavRect, Page::replay, HitTarget::replayPage, Icon::record, L"Nagrywanie");
     nav(clipsNavRect, Page::clips, HitTarget::clipsPage, Icon::clips, L"Biblioteka");
     nav(settingsNavRect, Page::settings, HitTarget::settingsPage, Icon::settings, L"Ustawienia");
+    nav(updatesNavRect, Page::updates, HitTarget::updatesPage, Icon::download, L"Aktualizacje");
+    if (state.updater.status().phase == L"available" || state.updater.status().phase == L"ready")
+        fillRounded(state, {177, 308, 183, 314}, 3, green);
     rule(state, 20, windowHeight - 178, 188);
     drawText(state, L"SZYBKI DOSTĘP", {24, windowHeight - 158, 194, windowHeight - 138},
              state.smallFormat.Get(), muted);
@@ -2465,6 +2490,52 @@ void drawSettingsPage(AppState &state) {
         state.headingFormat.Get(), white);
 }
 
+void drawUpdatesPage(AppState& state) {
+    const auto& update = state.updater.status();
+    const auto& phase = update.phase;
+    pageHeader(state, L"Aktualizacje", L"NexPlay " + nexplay::update::Controller::currentVersion() +
+        L" · stabilne wydania z GitHuba");
+    panel(state, {contentLeft, 166, contentRight, 411});
+    std::wstring title = L"Twój NexPlay, zawsze aktualny";
+    std::wstring description = L"Sprawdź, czy jest dostępna nowa wersja programu.";
+    std::wstring action = L"Sprawdź aktualizacje";
+    if (phase == L"checking") { title = L"Sprawdzanie aktualizacji…"; action = L"Sprawdzanie…"; }
+    else if (phase == L"current") { title = L"Masz aktualną wersję"; description = L"Nie ma nowszego stabilnego wydania do pobrania."; }
+    else if (phase == L"available") {
+        title = L"Dostępny NexPlay " + update.version;
+        description = L"Pobierz w tle. Nagrania i ustawienia pozostaną na swoim miejscu.";
+        action = L"Pobierz aktualizację";
+    } else if (phase == L"downloading" || phase == L"verifying") {
+        title = phase == L"verifying" ? L"Sprawdzanie pobranej paczki…" : L"Pobieranie NexPlay " + update.version;
+        description = L"Suma SHA-256 i test plików programu przed instalacją.";
+        action = std::to_wstring(update.percent) + L"%";
+    } else if (phase == L"ready" || phase == L"preparing" || phase == L"restarting") {
+        title = L"NexPlay " + update.version + L" jest gotowy";
+        description = state.engine.isRunning() || state.editorExporting
+            ? L"Zatrzymaj bufor i poczekaj na eksport przed ponownym uruchomieniem."
+            : L"Krótki restart podmieni pliki programu. Bez uruchamiania instalatora.";
+        action = phase == L"ready" ? L"Zaktualizuj i uruchom ponownie" : L"Przygotowywanie restartu…";
+    } else if (phase == L"error") {
+        title = L"Aktualizacja chwilowo niedostępna";
+        description = L"Sprawdź połączenie i spróbuj ponownie. Twoje nagrania są bezpieczne.";
+    }
+    drawText(state, title, {contentLeft + 24, 190, contentRight - 24, 224}, state.headingFormat.Get(), white);
+    drawText(state, description, {contentLeft + 24, 239, contentRight - 24, 285}, state.bodyFormat.Get(), muted);
+    if (phase == L"downloading" || phase == L"verifying" || phase == L"ready") {
+        const Rect rail{contentLeft + 24, 298, contentRight - 24, 302};
+        fillRounded(state, rail, 2, field);
+        fillRounded(state, {rail.left, rail.top, rail.left + (rail.right-rail.left)*update.percent/100.0F, rail.bottom}, 2, primary);
+    }
+    const bool canApply = phase != L"ready" || (!state.engine.isRunning() && !state.editorExporting);
+    drawButton(state, updateActionRect, action, HitTarget::updateAction, true, !state.updater.busy() && canApply);
+    panel(state, {contentLeft, 431, contentRight, 551});
+    drawText(state, L"Automatycznie sprawdzaj aktualizacje", {autoUpdateRect.left, 461, autoUpdateRect.right - 64, 490}, state.bodyFormat.Get(), white);
+    drawText(state, L"Po uruchomieniu i co 24 godziny, również w zasobniku. Instalacja tylko za Twoją zgodą.",
+        {autoUpdateRect.left, 495, autoUpdateRect.right - 64, 535}, state.smallFormat.Get(), muted);
+    drawToggle(state, {autoUpdateRect.right-40, 469, autoUpdateRect.right, 491}, state.autoUpdates ? 1.0F : 0.0F);
+    if (phase == L"error") drawText(state, update.detail, {contentLeft + 24, 576, contentRight - 24, 655}, state.smallFormat.Get(), muted);
+}
+
 void drawScene(AppState &state) {
     const ULONGLONG now = GetTickCount64();
     if (state.renderedPage != state.page) {
@@ -2479,6 +2550,8 @@ void drawScene(AppState &state) {
         drawClipsPage(state);
     else if (state.page == Page::editor)
         drawEditorPage(state);
+    else if (state.page == Page::updates)
+        drawUpdatesPage(state);
     else
         drawSettingsPage(state);
     // The native video child must not be faded independently of its player.
@@ -3270,6 +3343,13 @@ void exportEditor(const HWND window, AppState& state) {
     if (replayNavRect.contains(x, y)) return HitTarget::replayPage;
     if (clipsNavRect.contains(x, y)) return HitTarget::clipsPage;
     if (settingsNavRect.contains(x, y)) return HitTarget::settingsPage;
+    if (updatesNavRect.contains(x, y)) return HitTarget::updatesPage;
+    if (state.page == Page::updates) {
+        if (autoUpdateRect.contains(x, y)) return HitTarget::autoUpdateToggle;
+        if (updateActionRect.contains(x, y) && !state.updater.busy() &&
+            (state.updater.status().phase != L"ready" || (!state.engine.isRunning() && !state.editorExporting)))
+            return HitTarget::updateAction;
+    }
     if (state.page == Page::replay) {
         if (startRect.contains(x, y)) return HitTarget::startStop;
         if (saveRect.contains(x, y) && state.engine.isRunning()) return HitTarget::save;
@@ -3888,6 +3968,29 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
         updateEditorVisibility(state);
         InvalidateRect(window, nullptr, FALSE);
         return;
+    case HitTarget::updatesPage:
+        closeEditorPlayer(state);
+        state.page = Page::updates;
+        updateEditorVisibility(state);
+        InvalidateRect(window, nullptr, FALSE);
+        return;
+    case HitTarget::autoUpdateToggle:
+        state.autoUpdates = !state.autoUpdates;
+        writeSettingDword(L"AutoUpdates", state.autoUpdates ? 1 : 0);
+        if (state.autoUpdates) state.nextUpdateCheck = GetTickCount64();
+        InvalidateRect(window, nullptr, FALSE);
+        return;
+    case HitTarget::updateAction:
+        if (state.updater.status().phase == L"available") state.updater.download();
+        else if (state.updater.status().phase == L"ready") {
+            if (state.engine.isRunning() || state.editorExporting) return;
+            if (MessageBoxW(window, L"NexPlay zostanie zamknięty i uruchomiony ponownie po aktualizacji.\n"
+                L"Niezapisane zmiany w edytorze zostaną utracone. Kontynuować?", L"Aktualizacja NexPlay",
+                MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES) state.updater.apply();
+        } else state.updater.check();
+        state.nextUpdateCheck = GetTickCount64() + 86'400'000;
+        InvalidateRect(window, nullptr, FALSE);
+        return;
     case HitTarget::startStop:
         if (state.engine.isRunning()) stopRecorder(window, state); else startRecorder(window, state);
         return;
@@ -4124,6 +4227,8 @@ LRESULT CALLBACK windowProcedure(
         SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &state->clientAnimations, 0);
         removeLegacyThumbnailCache();
         loadPersistentSettings(*state);
+        state->autoUpdates = readSettingDword(L"AutoUpdates", 1) != 0;
+        SetTimer(window, 2, 1000, nullptr);
         const int darkMode = TRUE;
         DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
         const DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
@@ -4534,6 +4639,31 @@ LRESULT CALLBACK windowProcedure(
         }
         return 0;
     case WM_TIMER:
+        if (state != nullptr && wParam == 2) {
+            state->updater.poll();
+            const auto& update = state->updater.status();
+            if (update.phase == L"restarting") { DestroyWindow(window); return 0; }
+            if (update.phase == L"available" && state->notifiedUpdateVersion != update.version) {
+                state->notifiedUpdateVersion = update.version;
+                auto notification = state->tray;
+                notification.uFlags = NIF_INFO;
+                notification.dwInfoFlags = NIIF_INFO | NIIF_NOSOUND;
+                wcscpy_s(notification.szInfoTitle, L"Aktualizacja NexPlay");
+                const auto text = L"Dostępna wersja " + update.version + L". Kliknij, aby pobrać bez instalatora.";
+                wcsncpy_s(notification.szInfo, text.c_str(), _TRUNCATE);
+                Shell_NotifyIconW(NIM_MODIFY, &notification);
+            }
+            if (state->autoUpdates && GetTickCount64() >= state->nextUpdateCheck && !state->updater.busy() &&
+                update.phase != L"available" && update.phase != L"ready") {
+                state->nextUpdateCheck = GetTickCount64() + 86'400'000;
+                state->updater.check();
+            }
+            if (state->page == Page::updates || state->displayedUpdatePhase != update.phase) {
+                state->displayedUpdatePhase = update.phase;
+                InvalidateRect(window, nullptr, FALSE);
+            }
+            return 0;
+        }
         if (state != nullptr && wParam == 1) {
             const float speed = state->clientAnimations ? 0.22F : 1.0F;
             for (std::size_t index = 1; index < state->hoverAnimation.size(); ++index) {
@@ -4697,6 +4827,16 @@ LRESULT CALLBACK windowProcedure(
         return 0;
     }
     case trayMessage:
+        if (state != nullptr && lParam == NIN_BALLOONUSERCLICK) {
+            closeEditorPlayer(*state);
+            state->page = Page::updates;
+            updateEditorVisibility(*state);
+            SetTimer(window, 1, 16, nullptr);
+            ShowWindow(window, SW_RESTORE);
+            SetForegroundWindow(window);
+            InvalidateRect(window, nullptr, FALSE);
+            return 0;
+        }
         if (state != nullptr && (lParam == WM_LBUTTONUP || lParam == WM_LBUTTONDBLCLK)) {
             if (state->trayMenuWindow != nullptr) ShowWindow(state->trayMenuWindow, SW_HIDE);
             SetTimer(window, 1, 16, nullptr);
@@ -4748,6 +4888,7 @@ LRESULT CALLBACK windowProcedure(
         return 0;
     case WM_DESTROY:
         if (state != nullptr) {
+            KillTimer(window, 2);
             saveAccentColor(*state);
             closeEditorPlayer(*state);
             state->engine.stop();
@@ -4791,6 +4932,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCo
     if (commandLine && wcscmp(commandLine, L"--verify-installation") == 0) {
         const auto directory = nexplay::platform::applicationDirectory();
         if (!FindResourceW(instance, MAKEINTRESOURCEW(IDI_NEXPLAY), RT_GROUP_ICON)) return 2;
+        if (!FindResourceW(instance, L"UPDATER_SCRIPT", RT_RCDATA)) return 4;
         for (const auto* name : {L"ffmpeg.exe", L"ffprobe.exe"}) {
             const auto tool = directory / L"tools" / L"ffmpeg" / L"bin" / name;
             if (!nexplay::platform::isToolFile(tool) ||

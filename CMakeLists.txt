@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-project(NexPlay VERSION 0.2.2 LANGUAGES CXX RC)
+project(NexPlay VERSION 0.2.3 LANGUAGES CXX RC)
 
 find_program(NEXPLAY_POWERSHELL NAMES pwsh powershell REQUIRED)
 set(NEXPLAY_ICON_FILE "${CMAKE_CURRENT_BINARY_DIR}/brand/nexplay.ico")
@@ -14,7 +14,7 @@ add_custom_command(OUTPUT "${NEXPLAY_ICON_FILE}"
 add_custom_target(nexplay_brand DEPENDS "${NEXPLAY_ICON_FILE}")
 configure_file(src/resources/nexplay.rc.in "${CMAKE_CURRENT_BINARY_DIR}/nexplay.rc" @ONLY)
 set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/nexplay.rc"
-    PROPERTIES OBJECT_DEPENDS "${NEXPLAY_ICON_FILE}")
+    PROPERTIES OBJECT_DEPENDS "${NEXPLAY_ICON_FILE};${CMAKE_CURRENT_SOURCE_DIR}/src/update/Updater.ps1")
 
 add_executable(nexplay_diagnostics
     src/main.cpp
@@ -123,6 +123,9 @@ target_link_libraries(nexplay_replay_test PRIVATE
 )
 
 enable_testing()
+add_test(NAME app_updater COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+    -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/UpdateTests.ps1"
+    -OutputDirectory "${CMAKE_CURRENT_BINARY_DIR}/update-tests")
 
 add_executable(timeline_edit_tests tests/TimelineEditTests.cpp)
 target_compile_features(timeline_edit_tests PRIVATE cxx_std_20)
@@ -272,6 +275,7 @@ target_link_libraries(nexplay_av_replay_test PRIVATE
 add_executable(nexplay WIN32
     "${CMAKE_CURRENT_BINARY_DIR}/nexplay.rc"
     src/gui_main.cpp
+    src/update/UpdateController.cpp
     src/playback/PreviewAudio.cpp
     src/playback/Mp4AudioSource.cpp
     src/app/RecorderEngine.cpp
@@ -304,6 +308,7 @@ if(MSVC)
     target_compile_options(nexplay PRIVATE /W4 /permissive- /utf-8)
 endif()
 target_link_libraries(nexplay PRIVATE
+    version
     advapi32
     comctl32
     d3d11

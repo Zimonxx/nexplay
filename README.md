@@ -58,7 +58,17 @@ Nagrywanie na kartach AMD i Intel nie jest obsługiwane. Windows w edycji N wyma
 
 Wydanie 0.2.0 nie jest podpisane certyfikatem wydawcy, więc Windows może wyświetlić ostrzeżenie. Nie wyłączaj ochrony systemu. Pobieraj program z oficjalnego repozytorium; sumę pliku można porównać z `SHA256SUMS.txt` za pomocą `Get-FileHash -Algorithm SHA256 <plik>`.
 
-Zamknięcie okna chowa NexPlay do zasobnika. Przed aktualizacją lub odinstalowaniem poczekaj na zapis klipów i wybierz **Zakończ** w menu ikony. Aktualizacja zachowuje ustawienia, a odinstalowanie pozostawia nagrania i ustawienia użytkownika. Autostart i automatyczny bufor włącza się osobno w aplikacji — instalator nie włącza nagrywania sam.
+Zamknięcie okna chowa NexPlay do zasobnika. Przed ręcznym użyciem instalatora lub odinstalowaniem poczekaj na zapis klipów i wybierz **Zakończ** w menu ikony. Aktualizacja zachowuje ustawienia, a odinstalowanie pozostawia nagrania i ustawienia użytkownika. Autostart i automatyczny bufor włącza się osobno w aplikacji — instalator nie włącza nagrywania sam.
+
+### Aktualizacje w aplikacji
+
+Od wersji 0.2.3 NexPlay sprawdza stabilne wydania w oficjalnym repozytorium po uruchomieniu i co 24 godziny, także w zasobniku. Nowa wersja wywołuje ciche powiadomienie Windows i oznaczenie zakładki **Aktualizacje**. Automatyczne sprawdzanie można wyłączyć; przycisk ręcznego sprawdzania pozostaje dostępny.
+
+Wybierz **Pobierz aktualizację**, aby pobrać paczkę ZIP z procentowym postępem. Program weryfikuje SHA-256 z GitHub Releases, zawartość archiwum, wersję programu i działanie dołączonych narzędzi. Następnie zatrzymaj bufor, zakończ eksport i wybierz **Zaktualizuj i uruchom ponownie**. Zmiany montażu należy wcześniej wyeksportować. Pliki zostaną podmienione po zamknięciu programu, bez uruchamiania instalatora; NexPlay otworzy się ponownie.
+
+Mechanizm działa dla instalacji użytkownika i rozpakowanej wersji ZIP w zapisywalnym folderze. Nie zmienia nagrań, ustawień ani plików deinstalatora. Przy błędzie podmiany próbuje przywrócić poprzednie pliki; kopie odzyskiwania i status są w `%LOCALAPPDATA%\NexPlay\Updates`. Kontrola SHA-256 wykrywa uszkodzenie pobrania, ale nie zastępuje podpisu cyfrowego wydawcy. Sprawdzanie łączy się z API GitHuba; nie wysyła nagrań ani ustawień.
+
+Wersje starsze niż 0.2.3 wymagają jednorazowego przejścia na wydanie z tym mechanizmem przez instalator lub pełną paczkę ZIP. Kolejne wydania można już instalować z aplikacji.
 
 Domyślne skróty globalne:
 

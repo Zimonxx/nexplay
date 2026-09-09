@@ -13,7 +13,14 @@ Uruchom NexPlay, wybierz parametry i źródła dźwięku, kliknij Uruchom bufor.
 F8 zapisuje klip i zeruje bufor; F9 zatrzymuje bufor. Skróty możesz zmienić
 lub wyłączyć. Biblioteka pozwala przeglądać, przycinać i eksportować klipy.
 Zamknięcie okna chowa program do trayu. Aby wyjść, wybierz Zakończ w menu ikony.
-Przed aktualizacją lub odinstalowaniem zakończ program i poczekaj na zapis klipów.
+Przed ręczną instalacją lub odinstalowaniem zakończ program i poczekaj na zapis klipów.
+
+Zakładka Aktualizacje sprawdza nowe stabilne wydania automatycznie i na żądanie.
+Nowa wersja wywołuje ciche powiadomienie. Pobierz aktualizację w aplikacji,
+zatrzymaj bufor, zakończ eksport i wybierz Zaktualizuj i uruchom ponownie.
+Program sprawdzi paczkę i podmieni swoje pliki po zamknięciu, bez instalatora.
+Nagrania i ustawienia pozostają bez zmian. Zmiany montażu wcześniej wyeksportuj.
+Automatyczne sprawdzanie można wyłączyć w zakładce Aktualizacje.
 
 Autostart i automatyczny bufor włącza się osobno w ustawieniach aplikacji.
 Instalator nie włącza ich sam. Aktualizacja zachowuje dotychczasowy wybór.

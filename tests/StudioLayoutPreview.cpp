@@ -242,6 +242,10 @@ void validateHitTargets(AppState &state) {
         if (hitTest(state, editorSaveRect.left + 30, editorSaveRect.top + 16) == HitTarget::editorSave)
             throw std::runtime_error("Export button allowed a duplicate job");
         state.editorExporting = false;
+    } else if (state.page == Page::updates) {
+        checkTarget(updatesNavRect, HitTarget::updatesPage);
+        checkTarget(updateActionRect, HitTarget::updateAction);
+        checkTarget(autoUpdateRect, HitTarget::autoUpdateToggle);
     } else {
         checkTarget(openClipsRect, HitTarget::openClips);
         for (int i = 0;
@@ -263,7 +267,19 @@ int wmain(int argc, wchar_t **argv) {
     try {
         validateEditorTrackEdits();
         if (argc == 3) {
-            if (std::wstring(argv[2]) == L"--export-tests")
+            if (std::wstring(argv[2]) == L"--update-check") {
+                nexplay::update::Controller controller(std::filesystem::path(argv[1]) / L"update check test");
+                controller.check();
+                const auto deadline = GetTickCount64() + 60000;
+                while (controller.busy() && GetTickCount64() < deadline) {
+                    controller.poll();
+                    Sleep(20);
+                }
+                if (controller.busy() || (controller.status().phase != L"current" && controller.status().phase != L"available"))
+                    throw std::runtime_error("Embedded update helper integration failed");
+                std::wcout << L"Embedded updater, hidden launch, spaced path and progress polling passed: " << controller.status().phase << L"\n";
+            }
+            else if (std::wstring(argv[2]) == L"--export-tests")
                 validateEditorExports(std::filesystem::path(argv[1]) / L"export-fixtures");
             else if (std::wstring(argv[2]) == L"--playback-tests")
                 validateEditorPlayback(std::filesystem::path(argv[1]) / L"playback-fixtures");
@@ -322,7 +338,7 @@ int wmain(int argc, wchar_t **argv) {
                 static_cast<UINT>(size.cx), static_cast<UINT>(size.cy),
                 GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad, &bitmap));
             ensureGraphics(nullptr, state, bitmap.Get());
-            for (auto page : {Page::replay, Page::clips, Page::settings, Page::editor}) {
+            for (auto page : {Page::replay, Page::clips, Page::settings, Page::editor, Page::updates}) {
                 state.page = page;
                 validateHitTargets(state);
                 state.renderTarget->BeginDraw();
@@ -338,7 +354,7 @@ int wmain(int argc, wchar_t **argv) {
                 check(state.renderTarget->EndDraw());
                 const std::wstring name = std::to_wstring(size.cx) + L"-" +
                                           std::array{L"replay", L"library", L"editor",
-                                                     L"settings"}[static_cast<int>(page)] +
+                                                     L"settings", L"updates"}[static_cast<int>(page)] +
                                           L".png";
                 savePng(state, bitmap.Get(), folder / name);
             }
@@ -400,7 +416,7 @@ int wmain(int argc, wchar_t **argv) {
             savePng(state, bitmap.Get(), folder / L"save-toasts.png");
         }
         std::cout << "Layout and aspect checks passed at 16 sizes. Pointer checks passed on all "
-                     "pages. Rendered 12 page previews and 2 dialog previews.\n";
+                     "pages. Rendered 15 page previews and 2 dialog previews.\n";
     } catch (const std::exception &e) {
         std::cerr << e.what() << "\n";
         result = 1;

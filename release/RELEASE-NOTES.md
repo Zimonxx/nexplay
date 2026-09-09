@@ -1,4 +1,14 @@
-# NexPlay 0.2.2
+# NexPlay 0.2.3
+
+## Aktualizacje bez instalatora
+
+- Automatyczne sprawdzanie stabilnych wydań po uruchomieniu i co 24 godziny, również w zasobniku; opcja wyłączenia i ręczne sprawdzanie.
+- Ciche powiadomienie o nowej wersji i zakładka Aktualizacje z postępem pobierania.
+- Pobranie ZIP-a z oficjalnego GitHub Releases, weryfikacja SHA-256, zawartości, wersji i działania narzędzi.
+- Podmiana plików po potwierdzonym restarcie, bez instalatora. Blokada restartu podczas nagrywania lub eksportu; zachowanie ustawień, nagrań i deinstalatora.
+- Przy błędzie podmiany przywracane są poprzednie pliki; kopie odzyskiwania pozostają w lokalnym folderze NexPlay/Updates.
+
+Wersje 0.2.0–0.2.2 nie mają jeszcze aktualizatora — wymagają jednorazowego użycia nowego instalatora lub pełnego ZIP-a. Kolejne aktualizacje są dostępne z aplikacji.
 
 ## Poprawki
 
@@ -18,10 +28,10 @@ Nagrywarka powtórek z NVENC, osobnymi ścieżkami audio aplikacji i mikrofonu o
 
 ## Pobieranie
 
-- **NexPlay-0.2.2-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
-- **NexPlay-0.2.2-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
+- **NexPlay-0.2.3-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
+- **NexPlay-0.2.3-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
 - **SHA256SUMS.txt** — sumy kontrolne paczek.
-- **NexPlay-0.2.2-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
+- **NexPlay-0.2.3-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
 
 FFmpeg i FFprobe są dołączone. Nie trzeba ich osobno instalować ani ustawiać PATH. NexPlay ma własną ikonę w pliku EXE, trayu, pasku zadań i instalatorze. Kod i oryginalna grafika: MIT.
 
