@@ -1,4 +1,11 @@
-# NexPlay 0.2.3
+# NexPlay 0.2.4
+
+## Stabilny timeline
+
+- Naprawiono przeskakiwanie wskaźnika między wybraną pozycją a końcem klipu podczas przewijania na pauzie.
+- Przewijanie czeka na potwierdzenie odtwarzacza i zachowuje tylko najnowszą pozycję kursora zamiast kolejkować wszystkie ruchy.
+- Prawy brzeg timeline pokazuje ostatnią klatkę wideo, zamiast przewijać poza obraz do końcówki audio.
+- Poprawiono wznowienie podczas przewijania i synchronizację dźwięku po jego zakończeniu; obsługa działa też w pełnym ekranie.
 
 ## Aktualizacje bez instalatora
 
@@ -28,10 +35,10 @@ Nagrywarka powtórek z NVENC, osobnymi ścieżkami audio aplikacji i mikrofonu o
 
 ## Pobieranie
 
-- **NexPlay-0.2.3-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
-- **NexPlay-0.2.3-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
+- **NexPlay-0.2.4-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
+- **NexPlay-0.2.4-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
 - **SHA256SUMS.txt** — sumy kontrolne paczek.
-- **NexPlay-0.2.3-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
+- **NexPlay-0.2.4-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
 
 FFmpeg i FFprobe są dołączone. Nie trzeba ich osobno instalować ani ustawiać PATH. NexPlay ma własną ikonę w pliku EXE, trayu, pasku zadań i instalatorze. Kod i oryginalna grafika: MIT.
 

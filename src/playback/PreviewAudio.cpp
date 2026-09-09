@@ -81,6 +81,7 @@ void PreviewAudio::close() noexcept {
 }
 
 void PreviewAudio::pause() noexcept {
+    if (!playing_) return;
     for (auto &track : players_)
         track.player->Pause();
     playing_ = false;

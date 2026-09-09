@@ -283,6 +283,8 @@ int wmain(int argc, wchar_t **argv) {
                 validateEditorExports(std::filesystem::path(argv[1]) / L"export-fixtures");
             else if (std::wstring(argv[2]) == L"--playback-tests")
                 validateEditorPlayback(std::filesystem::path(argv[1]) / L"playback-fixtures");
+            else if (std::wstring(argv[2]) == L"--nvenc-seek-tests")
+                validateEditorPlayback(std::filesystem::path(argv[1]) / L"nvenc-seek-fixtures", {}, true);
             else if (std::wstring(argv[2]).starts_with(L"--muted-playback="))
                 validateEditorPlayback(std::filesystem::path(argv[1]) / L"playback-fixtures",
                     std::wstring(argv[2]).substr(17));

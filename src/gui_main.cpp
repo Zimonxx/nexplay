@@ -3,6 +3,7 @@
 #include "ui/SaveToasts.h"
 #include "audio/AudioSessionScanner.h"
 #include "playback/PreviewAudio.h"
+#include "playback/VideoSeek.h"
 #include "playback/ThumbnailSelection.h"
 #include "platform/windows/MediaTools.h"
 #include "resources/resource.h"
@@ -391,6 +392,10 @@ struct AppState final {
     std::filesystem::path selectedClip;
     std::wstring editorName;
     double editorDuration{};
+    double editorVideoDuration{};
+    double editorFrameRate{30.0};
+    nexplay::playback::VideoSeek embeddedSeek;
+    nexplay::playback::VideoSeek fullscreenSeek;
     LONG editorVideoWidth{};
     LONG editorVideoHeight{};
     double playPosition{};
@@ -409,6 +414,7 @@ struct AppState final {
     std::filesystem::path editorExportClip;
     DragHandle dragHandle{DragHandle::none};
     bool playing{};
+    std::optional<bool> editorPlaybackIntent;
     bool fullscreen{};
     bool fullscreenScrubbing{};
     int embeddedVideoRefreshFrames{};
@@ -2682,8 +2688,11 @@ void closeEditorPlayer(AppState& state) {
     state.previewAudio.close();
     if (state.mediaPlayer != nullptr) state.mediaPlayer->Shutdown();
     state.mediaPlayer.Reset();
+    state.embeddedSeek.reset();
+    state.fullscreenSeek.reset();
     if (state.videoWindow != nullptr) ShowWindow(state.videoWindow, SW_HIDE);
     state.playing = false;
+    state.editorPlaybackIntent.reset();
     state.embeddedVideoRefreshFrames = 0;
     state.dragHandle = DragHandle::none;
 }
@@ -2717,8 +2726,9 @@ void enterFullscreen(AppState& state) {
         0, videoWindowClassName, L"", WS_CHILD | WS_VISIBLE,
         0, 0, client.right, std::max(1L, client.bottom - controlsHeight),
         state.fullscreenWindow, nullptr, GetModuleHandleW(nullptr), state.mainWindow);
+    state.fullscreenSeek.reset();
     if (state.fullscreenVideoWindow == nullptr || FAILED(MFPCreateMediaPlayer(
-            state.selectedClip.c_str(), FALSE, 0, nullptr,
+            state.selectedClip.c_str(), FALSE, MFP_OPTION_FREE_THREADED_CALLBACK, state.fullscreenSeek.callback(),
             state.fullscreenVideoWindow, &state.fullscreenPlayer))) {
         DestroyWindow(state.fullscreenWindow);
         state.fullscreenWindow = nullptr;
@@ -2728,6 +2738,7 @@ void enterFullscreen(AppState& state) {
         return;
     }
     state.fullscreen = true;
+    state.editorPlaybackIntent = resumePlayback;
     state.fullscreenPlayer->SetMute(TRUE);
     state.activeField = HitTarget::none;
     seekEditor(state, position);
@@ -2752,6 +2763,7 @@ void exitFullscreen(AppState& state) {
     state.fullscreenWindow = nullptr;
     state.fullscreenVideoWindow = nullptr;
     state.fullscreen = false;
+    state.editorPlaybackIntent = resumePlayback;
     if (fullscreenWindow != nullptr) DestroyWindow(fullscreenWindow);
     const RECT video = physicalRect(state.mainWindow, videoSurfaceRect);
     MoveWindow(state.videoWindow, video.left, video.top,
@@ -2772,6 +2784,23 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
     state.selectedClip = clip;
     state.editorName = clip.stem().wstring() + L"-edit";
     state.editorDuration = 0;
+    state.editorVideoDuration = 0;
+    state.editorFrameRate = 30.0;
+    // Container duration can include an AAC tail after the final video frame.
+    // Never send EOF itself to MFPlay when displaying the timeline's right edge.
+    try {
+        const auto timing = runHiddenProcessCapture({L"ffprobe.exe", L"-v", L"error",
+            L"-select_streams", L"v:0", L"-show_entries", L"stream=duration,avg_frame_rate",
+            L"-of", L"default=noprint_wrappers=1", quoteProcessArgument(clip.wstring())});
+        std::istringstream lines(timing); std::string line;
+        while (std::getline(lines, line)) {
+            if (line.starts_with("duration=")) state.editorVideoDuration = std::stod(line.substr(9));
+            if (line.starts_with("avg_frame_rate=")) {
+                const auto rate = parseFrameRate(line.substr(15));
+                if (std::isfinite(rate) && rate > 0) state.editorFrameRate = rate;
+            }
+        }
+    } catch (...) { }
     state.editorVideoWidth = 0;
     state.editorVideoHeight = 0;
     state.playPosition = 0;
@@ -2787,7 +2816,8 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
     updateEditorVisibility(state);
     ShowWindow(state.videoWindow, SW_SHOW);
     const HRESULT result = MFPCreateMediaPlayer(
-        clip.c_str(), FALSE, 0, nullptr, state.videoWindow, &state.mediaPlayer);
+        clip.c_str(), FALSE, MFP_OPTION_FREE_THREADED_CALLBACK,
+        state.embeddedSeek.callback(), state.videoWindow, &state.mediaPlayer);
     if (FAILED(result)) {
         closeEditorPlayer(state);
         state.page = Page::clips;
@@ -2805,6 +2835,7 @@ void openEditor(const HWND window, AppState& state, const std::filesystem::path&
     }
     state.mediaPlayer->Play();
     state.playing = true;
+    state.editorPlaybackIntent = true;
     state.embeddedVideoRefreshFrames = 90;
     InvalidateRect(state.videoWindow, nullptr, FALSE);
     UpdateWindow(state.videoWindow);
@@ -2818,7 +2849,8 @@ void updatePreviewAudio(AppState& state) {
         tracks.push_back({track.included && editorTimelineEdit(state).contains(state.playPosition),
                           bounds.start, bounds.end, track.trackId});
     }
-    state.previewAudio.update(tracks, state.playPosition, state.playing);
+    const auto& seek = state.fullscreen ? state.fullscreenSeek : state.embeddedSeek;
+    state.previewAudio.update(tracks, state.playPosition, state.playing && !seek.busy());
 }
 
 void removeEditorAudioTrack(AppState& state, const std::size_t index) {
@@ -2845,6 +2877,20 @@ void updateEditorPlayback(AppState& state) {
         ? state.fullscreenPlayer.Get()
         : state.mediaPlayer.Get();
     if (player == nullptr) return;
+    auto& seek = state.fullscreen ? state.fullscreenSeek : state.embeddedSeek;
+    if (seek.poll(player)) {
+        if (SUCCEEDED(seek.failure()) && seek.heldPosition()) {
+            state.previewAudio.seek(*seek.heldPosition());
+            // Force a repaint of the decoded frame, also when playback is paused.
+            player->UpdateVideo();
+            if (state.playing) player->Play();
+        } else {
+            state.playing = false;
+            state.editorPlaybackIntent.reset();
+            player->Pause();
+            state.status = L"Nie udało się przewinąć klipu. Wybierz ponownie miejsce na timeline.";
+        }
+    }
     if (state.editorVideoWidth == 0 || state.editorVideoHeight == 0) {
         SIZE nativeSize{};
         if (SUCCEEDED(player->GetNativeVideoSize(&nativeSize, nullptr))) {
@@ -2864,13 +2910,18 @@ void updateEditorPlayback(AppState& state) {
     }
     PropVariantClear(&value);
     PropVariantInit(&value);
-    if (SUCCEEDED(player->GetPosition(MFP_POSITIONTYPE_100NS, &value))) {
+    if (!seek.busy() && (state.playing || !seek.heldPosition()) &&
+        SUCCEEDED(player->GetPosition(MFP_POSITIONTYPE_100NS, &value))) {
         state.playPosition = std::clamp(variantSeconds(value), 0.0, state.editorDuration);
     }
     PropVariantClear(&value);
     MFP_MEDIAPLAYER_STATE playerState{};
-    if (SUCCEEDED(player->GetState(&playerState))) {
-        state.playing = playerState == MFP_MEDIAPLAYER_STATE_PLAYING;
+    if (!seek.busy() && SUCCEEDED(player->GetState(&playerState))) {
+        const bool actualPlaying = playerState == MFP_MEDIAPLAYER_STATE_PLAYING;
+        if (!state.editorPlaybackIntent || actualPlaying == *state.editorPlaybackIntent) {
+            state.playing = actualPlaying;
+            state.editorPlaybackIntent.reset();
+        }
     }
     updatePreviewAudio(state);
 }
@@ -2880,12 +2931,14 @@ void seekEditor(AppState& state, const double seconds) {
         ? state.fullscreenPlayer.Get()
         : state.mediaPlayer.Get();
     if (player == nullptr) return;
-    PROPVARIANT position{};
-    position.vt = VT_I8;
-    position.hVal.QuadPart = static_cast<LONGLONG>(seconds * 10'000'000.0);
-    player->SetPosition(MFP_POSITIONTYPE_100NS, &position);
-    state.playPosition = seconds;
-    state.previewAudio.seek(seconds);
+    const auto videoDuration = state.editorVideoDuration > 0 && std::isfinite(state.editorVideoDuration)
+        ? std::min(state.editorDuration, state.editorVideoDuration) : state.editorDuration;
+    const auto lastFrame = std::max(0.0, videoDuration - 1.0 / state.editorFrameRate);
+    const double destination = std::clamp(std::isfinite(seconds) ? seconds : 0.0, 0.0, lastFrame);
+    auto& seek = state.fullscreen ? state.fullscreenSeek : state.embeddedSeek;
+    state.playPosition = destination;
+    state.previewAudio.pause();
+    seek.request(player, destination);
     updatePreviewAudio(state);
 }
 
@@ -2897,9 +2950,11 @@ void seekEditor(AppState& state, const double seconds) {
 
 void toggleEditorPlayback(AppState& state) {
     if (IMFPMediaPlayer* player = activeEditorPlayer(state); player != nullptr) {
-        if (state.playing) player->Pause();
-        else player->Play();
         state.playing = !state.playing;
+        state.editorPlaybackIntent = state.playing;
+        const auto& seek = state.fullscreen ? state.fullscreenSeek : state.embeddedSeek;
+        if (!state.playing) player->Pause();
+        else if (!seek.busy()) player->Play();
         updatePreviewAudio(state);
     }
 }
@@ -3145,9 +3200,7 @@ LRESULT CALLBACK fullscreenWindowProcedure(
             const float width = static_cast<float>(client.right);
             const float height = static_cast<float>(client.bottom);
             if (fullscreenPlayRect(height).contains(x, y) && state->fullscreenPlayer != nullptr) {
-                if (state->playing) state->fullscreenPlayer->Pause();
-                else state->fullscreenPlayer->Play();
-                state->playing = !state->playing;
+                toggleEditorPlayback(*state);
                 InvalidateRect(window, nullptr, FALSE);
                 return 0;
             }
@@ -3292,6 +3345,7 @@ void exportEditor(const HWND window, AppState& state) {
     if (state.mediaPlayer != nullptr) state.mediaPlayer->Pause();
     state.previewAudio.pause();
     state.playing = false;
+    state.editorPlaybackIntent = false;
     setStatus(window, state,
               state.cutEditorSelection
                   ? L"Wycinam fragment i składam jeden klip przez NVENC…"
@@ -3940,6 +3994,7 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
             state.mediaPlayer->Pause();
             state.previewAudio.pause();
             state.playing = false;
+            state.editorPlaybackIntent = false;
         }
         KillTimer(window, 1);
         ShowWindow(window, SW_HIDE);
@@ -4438,6 +4493,7 @@ LRESULT CALLBACK windowProcedure(
                     player->Pause();
                 }
                 state->playing = false;
+                state->editorPlaybackIntent = false;
                 SetCapture(window);
                 if (state->dragHandle==DragHandle::playhead) moveTrimHandle(*state, clickX);
                 else moveEditorAudioHandle(*state, clickX);
@@ -4469,6 +4525,7 @@ LRESULT CALLBACK windowProcedure(
             }
             if (state->mediaPlayer != nullptr) state->mediaPlayer->Pause();
             state->playing = false;
+            state->editorPlaybackIntent = false;
             SetCapture(window);
             moveTrimHandle(*state, logical.x);
             InvalidateRect(window, nullptr, FALSE);
