@@ -2,6 +2,7 @@
 #include "../src/gui_main.cpp"
 #include <iostream>
 #include "EditorExportChecks.h"
+#include "EditorPlaybackChecks.h"
 
 namespace {
 // An isolated, never-shown test window. Route only non-client messages through
@@ -264,6 +265,11 @@ int wmain(int argc, wchar_t **argv) {
         if (argc == 3) {
             if (std::wstring(argv[2]) == L"--export-tests")
                 validateEditorExports(std::filesystem::path(argv[1]) / L"export-fixtures");
+            else if (std::wstring(argv[2]) == L"--playback-tests")
+                validateEditorPlayback(std::filesystem::path(argv[1]) / L"playback-fixtures");
+            else if (std::wstring(argv[2]).starts_with(L"--muted-playback="))
+                validateEditorPlayback(std::filesystem::path(argv[1]) / L"playback-fixtures",
+                    std::wstring(argv[2]).substr(17));
             else if (std::wstring(argv[2]) == L"--window-frame")
                 validateNativeFrame();
             else

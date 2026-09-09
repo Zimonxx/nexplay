@@ -45,7 +45,7 @@ void PreviewAudio::open(const std::filesystem::path &file,
             check(player->CreateMediaItemFromObject(source.Get(), TRUE, 0, &item));
             DWORD count{};
             check(item->GetNumberOfStreams(&count));
-            bool matched = false;
+            unsigned matched = 0;
             for (DWORD i = 0; i < count; ++i) {
                 BOOL selected{};
                 ComPtr<IMFStreamDescriptor> stream;
@@ -57,9 +57,9 @@ void PreviewAudio::open(const std::filesystem::path &file,
                 const bool audio = major == MFMediaType_Audio;
                 const bool wanted = audio;
                 check(item->SetStreamSelection(i, wanted));
-                matched = matched || wanted;
+                if (wanted) ++matched;
             }
-            if (!matched || count != 1)
+            if (matched != 1)
                 throw std::runtime_error("Preview audio stream was not found");
             check(player->SetMediaItem(item.Get()));
             players_.push_back({std::move(player), true, track.trackId});
@@ -159,5 +159,19 @@ bool PreviewAudio::ready() const noexcept {
             return false;
     }
     return true;
+}
+bool PreviewAudio::playing(std::size_t index) const noexcept {
+    MFP_MEDIAPLAYER_STATE state{};
+    return index < players_.size() && SUCCEEDED(players_[index].player->GetState(&state)) &&
+        state == MFP_MEDIAPLAYER_STATE_PLAYING;
+}
+double PreviewAudio::position(std::size_t index) const noexcept {
+    if (index >= players_.size()) return -1;
+    PROPVARIANT value{};
+    const auto hr = players_[index].player->GetPosition(MFP_POSITIONTYPE_100NS, &value);
+    const double result = SUCCEEDED(hr) && value.vt == VT_I8
+        ? value.hVal.QuadPart / 10'000'000.0 : -1;
+    PropVariantClear(&value);
+    return result;
 }
 } // namespace nexplay::playback

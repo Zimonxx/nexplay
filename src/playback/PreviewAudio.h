@@ -33,6 +33,8 @@ class PreviewAudio final {
     [[nodiscard]] std::size_t size() const noexcept { return players_.size(); }
     [[nodiscard]] bool muted(std::size_t track) const noexcept;
     [[nodiscard]] bool ready() const noexcept;
+    [[nodiscard]] bool playing(std::size_t track) const noexcept;
+    [[nodiscard]] double position(std::size_t track) const noexcept;
 
   private:
     struct TrackPlayer {

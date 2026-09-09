@@ -92,7 +92,9 @@ class PatchedRead final
 };
 // Present all unwanted 'trak' boxes as equally-sized 'free' boxes IN MEMORY.
 // Keeping byte offsets and lengths identical preserves every sample table and
-// timestamp. The decoder can only see the chosen track, regardless of MF order.
+// timestamp. Only the chosen AUDIO track remains visible. Keep the video metadata:
+// without it, the Windows MP4 source scans the entire mdat before audio playback.
+// Video is explicitly deselected by PreviewAudio and is never decoded there.
 class TrackByteStream final
     : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IMFByteStream, FtmBase> {
   public:
@@ -243,7 +245,7 @@ ComPtr<IMFMediaSource> audioTrackSource(const std::filesystem::path &file, std::
     for (const auto &track : tracks) {
         if (track.id == id)
             found = track.audio;
-        else
+        else if (track.audio)
             patches->push_back(track.typeOffset);
     }
     if (!found)
