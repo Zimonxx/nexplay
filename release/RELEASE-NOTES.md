@@ -1,4 +1,10 @@
-# NexPlay 0.2.1
+# NexPlay 0.2.2
+
+## Poprawki
+
+- Naprawiono ciszę przy otwieraniu długich klipów. Odsłuch nie skanuje całego pliku osobno dla każdej ścieżki audio.
+- Zapis powtórek i eksport nie przepisują całego MP4 podczas finalizacji. Indeks pozostaje na końcu pliku; lokalne odtwarzanie i przewijanie działają normalnie.
+- Proces zapisu działa z obniżonym priorytetem CPU, a eksport ma ograniczoną liczbę wątków filtrów.
 
 ## Zmiany edytora
 
@@ -12,10 +18,10 @@ Nagrywarka powtórek z NVENC, osobnymi ścieżkami audio aplikacji i mikrofonu o
 
 ## Pobieranie
 
-- **NexPlay-0.2.1-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
-- **NexPlay-0.2.1-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
+- **NexPlay-0.2.2-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
+- **NexPlay-0.2.2-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
 - **SHA256SUMS.txt** — sumy kontrolne paczek.
-- **NexPlay-0.2.1-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
+- **NexPlay-0.2.2-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
 
 FFmpeg i FFprobe są dołączone. Nie trzeba ich osobno instalować ani ustawiać PATH. NexPlay ma własną ikonę w pliku EXE, trayu, pasku zadań i instalatorze. Kod i oryginalna grafika: MIT.
 

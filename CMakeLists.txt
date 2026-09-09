@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-project(NexPlay VERSION 0.2.1 LANGUAGES CXX RC)
+project(NexPlay VERSION 0.2.2 LANGUAGES CXX RC)
 
 find_program(NEXPLAY_POWERSHELL NAMES pwsh powershell REQUIRED)
 set(NEXPLAY_ICON_FILE "${CMAKE_CURRENT_BINARY_DIR}/brand/nexplay.ico")

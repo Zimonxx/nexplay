@@ -1167,6 +1167,7 @@ struct EditorResult final {
     std::vector<std::wstring> arguments{
         L"ffmpeg.exe", L"-hide_banner", L"-loglevel", L"error", L"-y",
         L"-nostdin", L"-nostats", L"-stats_period", L"0.1", L"-progress", L"pipe:1",
+        L"-filter_complex_threads", L"2", L"-threads", L"2",
         L"-hwaccel", L"cuda", L"-hwaccel_output_format", L"cuda",
         L"-i", quoteProcessArgument(input.wstring()),
     };
@@ -1281,7 +1282,9 @@ struct EditorResult final {
         }
     }
     arguments.insert(arguments.end(), {
-        L"-t", secondsArgument(outputDuration), L"-movflags", L"+faststart",
+        // Local playback can seek to the MP4 index at the end. Avoid rewriting
+        // multi-GB media a second time just to move that index to the beginning.
+        L"-t", secondsArgument(outputDuration),
         quoteProcessArgument(temporary.wstring()),
     });
     if (nexplay::app::runFfmpegProgress(arguments, outputDuration, progress) != 0) {

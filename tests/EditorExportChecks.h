@@ -101,6 +101,27 @@ inline void validateEditorExports(const std::filesystem::path &folder) {
         const auto result = exportEditedClip(source, name, 1, 3, edits, merge, cut, 4,
                                              [&](int value) { progress.push_back(value); });
         editorRequire(result.success, "GPU editor export failed");
+        // The local MP4 index must be appended, without a full-file faststart pass.
+        const auto exported = readFile(result.output);
+        std::size_t mediaOffset = exported.size(), indexOffset = exported.size();
+        for (std::size_t at = 0; at + 8 <= exported.size();) {
+            const auto word = [&](std::size_t offset) {
+                std::uint32_t n{};
+                for (int i = 0; i < 4; ++i)
+                    n = (n << 8) | static_cast<unsigned char>(exported[offset + i]);
+                return n;
+            };
+            std::uint64_t length = word(at);
+            const auto type = exported.substr(at + 4, 4);
+            if (type == "mdat") mediaOffset = at;
+            if (type == "moov") indexOffset = at;
+            if (length == 1 && at + 16 <= exported.size())
+                length = (std::uint64_t(word(at + 8)) << 32) | word(at + 12);
+            if (length < 8 || length > exported.size() - at) break;
+            at += static_cast<std::size_t>(length);
+        }
+        editorRequire(mediaOffset < indexOffset && indexOffset < exported.size(),
+            "Export rewrote the MP4 for faststart or omitted the final index");
         editorRequire(!progress.empty() && progress.back() == 100 &&
                           std::is_sorted(progress.begin(), progress.end()) &&
                           std::any_of(progress.begin(), progress.end(),

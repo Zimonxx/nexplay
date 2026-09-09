@@ -279,7 +279,8 @@ void saveStagedReplay(StagedAvReplay staged, const std::filesystem::path destina
         }
         arguments.insert(arguments.end(), {
             L"-t", decimalSeconds(staged.video.frameCount, framesPerSecond),
-            L"-movflags", L"+faststart", quoteSpawnArgument(outputPath.wstring()),
+            // Keep the MP4 index at the end: faststart rewrites the entire clip.
+            quoteSpawnArgument(outputPath.wstring()),
         });
 
         report(SavePhase::encoding, 20, outputPath.filename().wstring());

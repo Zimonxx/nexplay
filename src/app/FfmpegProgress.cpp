@@ -70,7 +70,8 @@ DWORD runFfmpegProgress(const std::vector<std::wstring> &arguments, double durat
     startup.lpAttributeList = list;
     PROCESS_INFORMATION process{};
     if (!CreateProcessW(command->executable.c_str(), command->line.data(), nullptr, nullptr, TRUE,
-                        CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr,
+                        CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT | BELOW_NORMAL_PRIORITY_CLASS,
+                        nullptr, nullptr,
                         &startup.StartupInfo, &process))
         throw std::runtime_error("Nie można uruchomić programu FFmpeg.");
     Handle processHandle{process.hProcess}, threadHandle{process.hThread};

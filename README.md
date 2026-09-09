@@ -170,6 +170,10 @@ Opcjonalne testy eksportu wymagają GPU NVIDIA i FFmpeg z NVDEC/NVENC. Tworzą w
 
 Opcjonalny argument `--window-frame` uruchamia dodatkowo test geometrii ramki na osobnym, niewidocznym oknie, bez uruchamiania nagrywarki. Zamiast tej opcji można podać ścieżkę do krótkiego pliku testowego MP4 (co najmniej 61 klatek), aby porównać miniatury z pełnym dekodowaniem przez FFmpeg.
 
+Argument `--playback-tests` sprawdza rzeczywisty start audio, pauzę, przewijanie i wyciszenia na syntetycznym, bezgłośnym klipie. Wymaga dostępnego urządzenia wyjściowego Windows. Argument `--muted-playback=C:/ścieżka/klip.mp4` sprawdza start i synchronizację własnego dłuższego pliku przy wyciszonym dźwięku oraz mierzy odczyty dyskowe; nie modyfikuje nagrania.
+
+Zapis klipów i eksport pozostawiają indeks MP4 na końcu pliku, aby nie przepisywać całego nagrania podczas finalizacji. Gotowy plik działa w lokalnych odtwarzaczach; odtwarzanie przez WWW przed pobraniem całego pliku może wymagać przygotowania go przez serwis hostingowy.
+
 Podgląd zawiera też plik `save-toasts.png` z powiadomieniami zapisu. Opcjonalny cel
 `save_toast_native_tests` sprawdza rzeczywiste nakładki: wyświetla na chwilę dwa
 syntetyczne, bezgłośne toasty, bez nagrywania ekranu i tworzenia klipów. Nie należy
@@ -195,8 +199,8 @@ Pierwszy skrypt buduje ograniczony do potrzeb NexPlay wariant FFmpeg 9.0.1 z ofi
 Tag w formacie `vX.Y.Z`, zgodny z wersją w `CMakeLists.txt`, uruchamia budowanie i testy, a następnie publikuje instalator, ZIP, odpowiadające źródła FFmpeg i SHA256 na GitHubie:
 
 ```powershell
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
 Przepływ można ponowić w **Actions**, podając istniejący tag. Istniejące publiczne wydanie nie jest automatycznie nadpisywane. Zwykły CI udostępnia sam plik EXE jako artefakt deweloperski; pełna paczka użytkowa znajduje się w Releases.
