@@ -1,4 +1,11 @@
-# NexPlay 0.2.7
+# NexPlay 0.2.8
+
+## Zapamiętywanie źródeł audio
+
+- Wyłączone źródła trafiają na dół listy, a po ponownym włączeniu wracają nad wyłączone.
+- Wykluczenia aplikacji zapisują się od razu i pozostają po restarcie NexPlay lub samej aplikacji. Rozpoznawanie odbywa się po nazwie EXE, nie po zmiennym numerze procesu; dotyczy również wielu procesów tego samego programu.
+- Lista źródeł odświeża się w tle co około 2 sekundy. Pojawienie się lub zniknięcie aplikacji nie kasuje wykluczeń ani nie przewija listy na początek. Błąd skanowania zachowuje ostatnią poprawną listę.
+- Podczas działania bufora nowe źródła są dołączane przy kolejnym zapisie klipu i wyzerowaniu bufora. Odświeżenie samej listy nie przerywa nagrania.
 
 ## Naprawa aktualizatora
 
@@ -51,10 +58,10 @@ Nagrywarka powtórek z NVENC, osobnymi ścieżkami audio aplikacji i mikrofonu o
 
 ## Pobieranie
 
-- **NexPlay-0.2.7-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
-- **NexPlay-0.2.7-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
+- **NexPlay-0.2.8-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
+- **NexPlay-0.2.8-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
 - **SHA256SUMS.txt** — sumy kontrolne paczek.
-- **NexPlay-0.2.7-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
+- **NexPlay-0.2.8-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
 
 FFmpeg i FFprobe są dołączone. Nie trzeba ich osobno instalować ani ustawiać PATH. NexPlay ma własną ikonę w pliku EXE, trayu, pasku zadań i instalatorze. Kod i oryginalna grafika: MIT.
 

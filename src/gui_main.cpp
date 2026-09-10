@@ -29,6 +29,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <future>
 #include <map>
 #include <memory>
 #include <semaphore>
@@ -308,6 +309,7 @@ struct AudioRow final {
     bool included{true};
     bool groupSelected{};
     std::wstring groupName;
+    std::wstring applicationId;
 };
 
 struct EditorAudioTrack final {
@@ -373,6 +375,10 @@ struct AppState final {
     Page page{Page::replay};
     HitTarget hover{HitTarget::none};
     std::vector<AudioRow> audioRows;
+    nexplay::audio::ExcludedApplications excludedAudioApplications;
+    std::future<std::vector<nexplay::audio::AudioApplication>> audioScan;
+    ULONGLONG nextAudioScan{};
+    bool audioScanNotification{};
     std::vector<ClipRow> clips;
     std::set<std::pair<std::filesystem::path, int>> thumbnailsPending;
     std::set<std::pair<std::filesystem::path, int>> thumbnailFailures;
@@ -799,6 +805,7 @@ LRESULT CALLBACK passiveKeyboardProcedure(
 }
 
 void loadPersistentSettings(AppState& state) {
+    state.excludedAudioApplications = nexplay::audio::loadAudioExclusions(HKEY_CURRENT_USER, settingsRegistryPath);
     state.autostart = autostartIsEnabled();
     state.autoBuffer = readSettingDword(L"AutoBuffer", 0) != 0;
     state.saveHotkeyEnabled = readSettingDword(L"SaveHotkeyEnabled", 1) != 0;
@@ -1915,7 +1922,9 @@ void drawReplayPage(AppState &state) {
                HitTarget::resolutionField, false, !running);
     drawText(state, L"Źródła audio", {x, 453, contentRight - 380, 485}, state.headingFormat.Get(),
              white);
-    drawText(state, L"Każda aplikacja jako osobna ścieżka. Wybierz ogniwa, aby utworzyć grupę.",
+    drawText(state, running
+                 ? L"Lista odświeża się automatycznie. Nowe źródła dołączą po zapisie klipu."
+                 : L"Wykluczenia są zapamiętywane. Lista odświeża się automatycznie co 2 s.",
              {x, 495, contentRight - 20, 520}, state.smallFormat.Get(), muted);
     const auto selected = selectedAudioRowCount(state);
     drawButton(state, createAudioGroupRect,
@@ -2629,23 +2638,68 @@ void setStatus(const HWND window, AppState& state, std::wstring text) {
     InvalidateRect(window, nullptr, FALSE);
 }
 
-void refreshAudioApplications(const HWND window, AppState& state) {
+void applyAudioApplications(AppState& state, const std::vector<nexplay::audio::AudioApplication>& applications) {
     std::map<DWORD, AudioRow> previous;
     for (const auto& row : state.audioRows) previous[row.processId] = row;
+    DWORD scrollAnchor{};
+    if (state.audioScroll > 0 && state.audioScroll < static_cast<int>(state.audioRows.size()))
+        scrollAnchor = state.audioRows[state.audioScroll].processId;
     state.audioRows.clear();
-    for (const auto& application : nexplay::audio::activeAudioApplications()) {
+    for (const auto& application : applications) {
         const auto selection = previous.find(application.processId);
-        AudioRow row{.processId = application.processId, .name = application.name};
-        if (selection != previous.end()) {
-            row.included = selection->second.included;
+        AudioRow row{.processId = application.processId, .name = application.name,
+                     .applicationId = application.applicationId};
+        row.included = !nexplay::audio::isApplicationExcluded(state.excludedAudioApplications, row.applicationId);
+        if (selection != previous.end() && selection->second.applicationId == row.applicationId &&
+            selection->second.name == row.name) {
+            if (row.applicationId.empty()) row.included = selection->second.included;
             row.groupSelected = selection->second.groupSelected;
             row.groupName = selection->second.groupName;
         }
         state.audioRows.push_back(std::move(row));
     }
-    state.audioScroll = 0;
-    setStatus(window, state,
-              L"Wykryto " + std::to_wstring(state.audioRows.size()) + L" aktywnych źródeł audio");
+    nexplay::audio::sortAudioSources(state.audioRows);
+    if (scrollAnchor) {
+        const auto anchor = std::ranges::find(state.audioRows, scrollAnchor, &AudioRow::processId);
+        if (anchor != state.audioRows.end()) state.audioScroll = static_cast<int>(anchor - state.audioRows.begin());
+    }
+    state.audioScroll = std::clamp(state.audioScroll, 0,
+        std::max(0, static_cast<int>(state.audioRows.size()) - audioVisibleRows));
+}
+
+void refreshAudioApplications(const HWND, AppState& state, bool notify = true) {
+    state.audioScanNotification = state.audioScanNotification || notify;
+    if (state.audioScan.valid()) return;
+    state.nextAudioScan = GetTickCount64() + 2'000;
+    state.audioScan = std::async(std::launch::async, [] {
+        const HRESULT result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        if (FAILED(result)) throw std::runtime_error("Cannot initialize audio scanner");
+        struct Apartment { ~Apartment() { CoUninitialize(); } } apartment;
+        return nexplay::audio::activeAudioApplications();
+    });
+}
+
+void pollAudioApplications(HWND window, AppState& state) {
+    // Do not move the clicked row between button-down and button-up, or while
+    // the user is naming a group. A scan never touches UI state on its worker.
+    if (state.audioGroupDialogOpen ||
+        (GetForegroundWindow() == window && (GetAsyncKeyState(VK_LBUTTON) & 0x8000))) return;
+    if (state.audioScan.valid() && state.audioScan.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        try {
+            applyAudioApplications(state, state.audioScan.get());
+            if (state.audioScanNotification) setStatus(window, state,
+                L"Wykryto " + std::to_wstring(state.audioRows.size()) + L" aktywnych źródeł audio");
+            if (state.page == Page::replay) InvalidateRect(window, nullptr, FALSE);
+        } catch (...) {
+            // A failed scan is not an empty list. Keep the last valid snapshot.
+            if (state.audioScanNotification) setStatus(window, state, L"Nie udało się odczytać źródeł audio.");
+        }
+        state.audioScanNotification = false;
+    }
+    if (!state.audioScan.valid() && GetTickCount64() >= state.nextAudioScan) {
+        try { refreshAudioApplications(window, state, false); }
+        catch (...) { state.nextAudioScan = GetTickCount64() + 2'000; }
+    }
 }
 
 void refreshClips(const HWND window, AppState& state) {
@@ -3270,9 +3324,11 @@ LRESULT CALLBACK fullscreenWindowProcedure(
     settings.outputWidth = portrait ? resolution.height : resolution.width;
     settings.outputHeight = portrait ? resolution.width : resolution.height;
     settings.captureMicrophone = state.microphone;
+    settings.excludedApplications = state.excludedAudioApplications;
     for (const auto& row : state.audioRows) {
-        if (!row.included) settings.excludedProcessIds.insert(row.processId);
-        else if (!row.groupName.empty()) {
+        if (!row.included) {
+            if (row.applicationId.empty()) settings.excludedProcessIds.insert(row.processId);
+        } else if (!row.groupName.empty()) {
             settings.groupedProcessNames.emplace(row.processId, row.groupName);
         }
     }
@@ -4247,7 +4303,25 @@ void handleClick(const HWND window, AppState& state, const float x, const float 
                     row.groupSelected = !row.groupSelected;
                 }
             } else {
-                row.included = !row.included;
+                const bool included = !row.included;
+                const auto id = row.applicationId;
+                if (id.empty()) {
+                    row.included = included;
+                    setStatus(window, state, L"Nie można rozpoznać programu — wybór dotyczy tylko bieżącego procesu.");
+                } else {
+                    auto next = state.excludedAudioApplications;
+                    if (included) next.erase(id); else next.insert(id);
+                    if (!nexplay::audio::saveAudioExclusions(HKEY_CURRENT_USER, settingsRegistryPath, next)) {
+                        setStatus(window, state, L"Nie udało się zapisać wykluczenia audio. Spróbuj ponownie.");
+                        return;
+                    }
+                    state.excludedAudioApplications = std::move(next);
+                    for (auto& candidate : state.audioRows) {
+                        if (!candidate.applicationId.empty()) candidate.included =
+                            !nexplay::audio::isApplicationExcluded(state.excludedAudioApplications, candidate.applicationId);
+                    }
+                }
+                nexplay::audio::sortAudioSources(state.audioRows);
             }
             InvalidateRect(window, nullptr, FALSE);
         }
@@ -4699,6 +4773,7 @@ LRESULT CALLBACK windowProcedure(
         return 0;
     case WM_TIMER:
         if (state != nullptr && wParam == 2) {
+            pollAudioApplications(window, *state);
             state->updater.poll();
             const auto& update = state->updater.status();
             if (update.phase == L"restarting") { DestroyWindow(window); return 0; }

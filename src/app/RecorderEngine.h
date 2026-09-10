@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include "SaveProgress.h"
+#include "audio/AudioSourcePreferences.h"
 
 #include <atomic>
 #include <chrono>
@@ -24,6 +25,7 @@ struct RecorderSettings {
     std::uint32_t outputHeight{};
     bool captureMicrophone{true};
     std::set<DWORD> excludedProcessIds;
+    audio::ExcludedApplications excludedApplications;
     std::map<DWORD, std::wstring> groupedProcessNames;
 };
 

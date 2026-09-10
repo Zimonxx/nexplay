@@ -5,8 +5,51 @@
 #include "EditorPlaybackChecks.h"
 
 namespace {
+void validateAudioSourceRefresh() {
+    AppState state;
+    state.excludedAudioApplications.insert(L"Zen.exe");
+    applyAudioApplications(state, {{1, L"Zen", L"zen.exe"}, {2, L"Discord", L"Discord.exe"}});
+    if (state.audioRows.size() != 2 || state.audioRows[0].processId != 2 || state.audioRows[1].included)
+        throw std::runtime_error("Excluded source did not move below active sources");
+    state.audioRows[0].groupName = L"Chat";
+    state.audioRows[0].groupSelected = true;
+    applyAudioApplications(state, {{1, L"Zen", L"zen.exe"}, {2, L"Discord", L"Discord.exe"}, {3, L"Zen", L"ZEN.EXE"}});
+    if (state.audioRows[0].groupName != L"Chat" || !state.audioRows[0].groupSelected || state.audioRows[2].included)
+        throw std::runtime_error("Refresh lost a group or enabled a second excluded process");
+    applyAudioApplications(state, {});
+    if (!state.audioRows.empty() || state.excludedAudioApplications.empty())
+        throw std::runtime_error("Disappearance erased saved exclusions");
+    applyAudioApplications(state, {{99, L"Zen", L"zen.exe"}});
+    if (state.audioRows[0].included) throw std::runtime_error("Restarted process lost its exclusion");
+    const auto settings = readSettings(state);
+    if (!nexplay::audio::isApplicationExcluded(settings.excludedApplications, L"ZEN.EXE"))
+        throw std::runtime_error("Recorder did not receive persistent exclusions");
+    state.excludedAudioApplications.erase(L"ZEN.EXE");
+    applyAudioApplications(state, {{99, L"Zen", L"zen.exe"}});
+    if (!state.audioRows[0].included) throw std::runtime_error("Re-enabled application stayed disabled");
+    state.audioRows[0].groupName = L"Old group";
+    applyAudioApplications(state, {{99, L"Other", L"Other.exe"}});
+    if (!state.audioRows[0].groupName.empty()) throw std::runtime_error("Reused PID inherited another application's group");
+    state.page = Page::clips;
+    state.nextAudioScan = GetTickCount64() + 60'000;
+    std::promise<std::vector<nexplay::audio::AudioApplication>> pending;
+    state.audioScan = pending.get_future();
+    pollAudioApplications(nullptr, state);
+    if (state.audioRows[0].processId != 99) throw std::runtime_error("Pending scan changed the list");
+    pending.set_exception(std::make_exception_ptr(std::runtime_error("Test scan failure")));
+    pollAudioApplications(nullptr, state);
+    if (state.audioRows[0].processId != 99) throw std::runtime_error("Failed scan cleared the last good snapshot");
+    std::promise<std::vector<nexplay::audio::AudioApplication>> completed;
+    state.audioScan = completed.get_future();
+    completed.set_value({{100, L"New app", L"New.exe"}});
+    pollAudioApplications(nullptr, state);
+    if (state.audioRows.size() != 1 || state.audioRows[0].processId != 100)
+        throw std::runtime_error("Background scan did not update the list");
+    std::cout << "Audio source refresh: exclusions, process restarts, grouping, disappearance and recorder settings passed.\n";
+}
 // Feed only our callback, never inject keys into Windows or install a hook.
 void validateShortcutChords() {
+    validateAudioSourceRefresh();
     AppState state;
     const HWND window = CreateWindowExW(0, L"STATIC", L"Shortcut fixture", 0,
         0, 0, 1, 1, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);

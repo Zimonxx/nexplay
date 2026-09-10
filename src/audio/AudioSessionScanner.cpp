@@ -14,21 +14,22 @@ namespace {
 
 using Microsoft::WRL::ComPtr;
 
-[[nodiscard]] std::wstring processName(const DWORD processId) {
+[[nodiscard]] AudioApplication processApplication(const DWORD processId) {
     const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
     if (process == nullptr) {
-        return L"proces-" + std::to_wstring(processId);
+        return {processId, L"proces-" + std::to_wstring(processId), {}};
     }
 
     std::wstring path(32'768, L'\0');
     DWORD pathLength = static_cast<DWORD>(path.size());
     if (QueryFullProcessImageNameW(process, 0, path.data(), &pathLength) == FALSE) {
         CloseHandle(process);
-        return L"proces-" + std::to_wstring(processId);
+        return {processId, L"proces-" + std::to_wstring(processId), {}};
     }
     CloseHandle(process);
     path.resize(pathLength);
-    return std::filesystem::path(path).stem().wstring();
+    const std::filesystem::path executable(path);
+    return {processId, executable.stem().wstring(), executable.filename().wstring()};
 }
 
 } // namespace
@@ -52,7 +53,7 @@ std::vector<AudioApplication> activeAudioApplications() {
 
     UINT deviceCount{};
     devices->GetCount(&deviceCount);
-    std::map<DWORD, std::wstring> applications;
+    std::map<DWORD, AudioApplication> applications;
 
     for (UINT deviceIndex = 0; deviceIndex < deviceCount; ++deviceIndex) {
         ComPtr<IMMDevice> device;
@@ -95,14 +96,14 @@ std::vector<AudioApplication> activeAudioApplications() {
                 continue;
             }
 
-            applications.try_emplace(processId, processName(processId));
+            applications.try_emplace(processId, processApplication(processId));
         }
     }
 
     std::vector<AudioApplication> resultApplications;
     resultApplications.reserve(applications.size());
-    for (auto& [processId, name] : applications) {
-        resultApplications.push_back({processId, std::move(name)});
+    for (auto& [processId, application] : applications) {
+        resultApplications.push_back(std::move(application));
     }
     return resultApplications;
 }

@@ -314,7 +314,8 @@ void saveStagedReplay(StagedAvReplay staged, const std::filesystem::path destina
     const RecorderSettings& settings) {
     std::vector<std::unique_ptr<ActiveAudioTrack>> tracks;
     for (const auto& application : audio::activeAudioApplications()) {
-        if (settings.excludedProcessIds.contains(application.processId)) {
+        if (settings.excludedProcessIds.contains(application.processId) ||
+            audio::isApplicationExcluded(settings.excludedApplications, application.applicationId)) {
             continue;
         }
         try {

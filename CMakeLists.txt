@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-project(NexPlay VERSION 0.2.7 LANGUAGES CXX RC)
+project(NexPlay VERSION 0.2.8 LANGUAGES CXX RC)
 
 find_program(NEXPLAY_POWERSHELL NAMES pwsh powershell REQUIRED)
 set(NEXPLAY_ICON_FILE "${CMAKE_CURRENT_BINARY_DIR}/brand/nexplay.ico")
@@ -123,6 +123,12 @@ target_link_libraries(nexplay_replay_test PRIVATE
 )
 
 enable_testing()
+add_executable(audio_source_preferences_tests tests/AudioSourcePreferencesTests.cpp)
+target_compile_features(audio_source_preferences_tests PRIVATE cxx_std_20)
+target_compile_definitions(audio_source_preferences_tests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_include_directories(audio_source_preferences_tests PRIVATE src)
+target_link_libraries(audio_source_preferences_tests PRIVATE advapi32)
+add_test(NAME audio_source_preferences COMMAND audio_source_preferences_tests)
 add_test(NAME app_updater COMMAND powershell -NoProfile -ExecutionPolicy Bypass
     -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/UpdateTests.ps1"
     -OutputDirectory "${CMAKE_CURRENT_BINARY_DIR}/update-tests")

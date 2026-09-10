@@ -18,6 +18,7 @@ NexPlay to lekka nagrywarka powtórek dla Windows, korzystająca ze sprzętowego
 - oddzielna ścieżka audio dla każdej aktywnej aplikacji oraz mikrofonu,
 - łączenie wybranych aplikacji w jedną nazwaną ścieżkę audio,
 - możliwość wykluczania wybranych aplikacji i mikrofonu z nagrania,
+- zapamiętywanie wykluczeń aplikacji po restarcie, wyłączone źródła na dole listy i automatyczne odświeżanie listy audio,
 - globalne skróty działające również wtedy, gdy NexPlay jest aktywnym oknem,
 - zmiana lub niezależne wyłączanie skrótów i zmiana koloru akcentu w ustawieniach,
 - ciche powiadomienia zapisu z procentem postępu, wyborem rogu ekranu i obsługą kilku klipów naraz,
@@ -59,6 +60,12 @@ Nagrywanie na kartach AMD i Intel nie jest obsługiwane. Windows w edycji N wyma
 Wydanie 0.2.0 nie jest podpisane certyfikatem wydawcy, więc Windows może wyświetlić ostrzeżenie. Nie wyłączaj ochrony systemu. Pobieraj program z oficjalnego repozytorium; sumę pliku można porównać z `SHA256SUMS.txt` za pomocą `Get-FileHash -Algorithm SHA256 <plik>`.
 
 Zamknięcie okna chowa NexPlay do zasobnika. Przed ręcznym użyciem instalatora lub odinstalowaniem poczekaj na zapis klipów i wybierz **Zakończ** w menu ikony. Aktualizacja zachowuje ustawienia, a odinstalowanie pozostawia nagrania i ustawienia użytkownika. Autostart i automatyczny bufor włącza się osobno w aplikacji — instalator nie włącza nagrywania sam.
+
+### Źródła audio
+
+Odznacz program w sekcji **Źródła audio**, aby wykluczyć jego dźwięk. Wiersz trafia pod włączone źródła. Wybór zapisuje się od razu i obejmuje wszystkie procesy o tej samej nazwie pliku EXE, niezależnie od wielkości liter i numeru procesu. Zaznacz program ponownie, aby usunąć wykluczenie. Jeśli Windows nie pozwala odczytać nazwy programu, aplikacja informuje, że wybór dotyczy tylko bieżącego procesu.
+
+Lista aktywnych źródeł odświeża się w tle co około 2 sekundy, również w trayu. Zniknięcie programu nie usuwa jego wykluczenia. Podczas pracy bufora nowe źródła są dołączane przy następnym zapisie klipu i wyzerowaniu bufora; sama aktualizacja listy nie resetuje nagrania. Zmianę wyboru źródeł wykonuj przy zatrzymanym buforze. Ustawienie mikrofonu jest zapamiętywane niezależnie.
 
 ### Aktualizacje w aplikacji
 
@@ -211,8 +218,8 @@ Pierwszy skrypt buduje ograniczony do potrzeb NexPlay wariant FFmpeg 9.0.1 z ofi
 Tag w formacie `vX.Y.Z`, zgodny z wersją w `CMakeLists.txt`, uruchamia budowanie i testy, a następnie publikuje instalator, ZIP, odpowiadające źródła FFmpeg i SHA256 na GitHubie:
 
 ```powershell
-git tag v0.2.7
-git push origin v0.2.7
+git tag v0.2.8
+git push origin v0.2.8
 ```
 
 Przepływ można ponowić w **Actions**, podając istniejący tag. Istniejące publiczne wydanie nie jest automatycznie nadpisywane. Zwykły CI udostępnia sam plik EXE jako artefakt deweloperski; pełna paczka użytkowa znajduje się w Releases.
