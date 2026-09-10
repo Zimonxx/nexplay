@@ -1,4 +1,11 @@
-# NexPlay 0.2.4
+# NexPlay 0.2.5
+
+## Skróty złożone i aktualizacja w aplikacji
+
+- Ustawianie kombinacji takich jak **RShift + Page Down**, z rozróżnieniem lewego i prawego Shift, Ctrl oraz Alt.
+- Sam Page Down ani LShift + Page Down nie aktywuje skrótu przypisanego do RShift. Przytrzymanie klawisza nie zapisuje wielu klipów.
+- Zachowanie starszych skrótów i wykrywanie konfliktów między skrótem ogólnym a przypisanym do konkretnej strony klawiatury.
+- To wydanie jest dostępne w **Aktualizacje → Sprawdź aktualizacje → Pobierz aktualizację**. Wersje 0.2.3 i 0.2.4 mogą przejść na nie bez instalatora, po krótkim restarcie aplikacji.
 
 ## Stabilny timeline
 
@@ -35,10 +42,10 @@ Nagrywarka powtórek z NVENC, osobnymi ścieżkami audio aplikacji i mikrofonu o
 
 ## Pobieranie
 
-- **NexPlay-0.2.4-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
-- **NexPlay-0.2.4-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
+- **NexPlay-0.2.5-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
+- **NexPlay-0.2.5-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
 - **SHA256SUMS.txt** — sumy kontrolne paczek.
-- **NexPlay-0.2.4-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
+- **NexPlay-0.2.5-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
 
 FFmpeg i FFprobe są dołączone. Nie trzeba ich osobno instalować ani ustawiać PATH. NexPlay ma własną ikonę w pliku EXE, trayu, pasku zadań i instalatorze. Kod i oryginalna grafika: MIT.
 

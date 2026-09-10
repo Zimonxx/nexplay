@@ -15,6 +15,22 @@ void tests() {
     require(app::shortcutMatches(true, 119, 0, 119, 0), "Enabled shortcut did not match");
     require(!app::shortcutMatches(false, 119, 0, 119, 0), "Disabled shortcut fired");
     require(!app::shortcutMatches(true, 119, 2, 119, 0), "Wrong modifiers fired");
+    constexpr auto rightShiftPageDown = app::shortcutModifiers(false, false, false, false, false, true);
+    constexpr auto leftShiftPageDown = app::shortcutModifiers(false, false, false, false, true, false);
+    require(app::shortcutMatches(true, 0x22, rightShiftPageDown, 0x22, rightShiftPageDown), "RShift+PageDown did not fire");
+    require(!app::shortcutMatches(true, 0x22, rightShiftPageDown, 0x22, 0), "PageDown alone fired a chord");
+    require(!app::shortcutMatches(true, 0x22, rightShiftPageDown, 0xa1, rightShiftPageDown), "Modifier alone fired a chord");
+    require(!app::shortcutMatches(true, 0x22, rightShiftPageDown, 0x22, leftShiftPageDown), "LShift activated RShift binding");
+    require(!app::shortcutMatches(true, 0x22, rightShiftPageDown, 0x22, rightShiftPageDown | 2 | app::leftControl), "Extra Ctrl activated a chord");
+    require(!app::shortcutMatches(true, 0x22, rightShiftPageDown, 0x22, rightShiftPageDown | 8), "Windows modifier was ignored");
+    require(app::shortcutMatches(true, 0x22, 4, 0x22, rightShiftPageDown) &&
+        app::shortcutMatches(true, 0x22, 4, 0x22, leftShiftPageDown), "Legacy generic Shift binding stopped working");
+    require(app::shortcutsOverlap(0x22, 4, 0x22, rightShiftPageDown), "Generic/sided conflict not detected");
+    require(!app::shortcutsOverlap(0x22, leftShiftPageDown, 0x22, rightShiftPageDown), "Distinct sides treated as duplicates");
+    require(app::physicalShortcutKey(0x10, 0x36, false) == 0xa1 &&
+        app::physicalShortcutKey(0x10, 0x2a, false) == 0xa0 &&
+        app::physicalShortcutKey(0x11, 0, true) == 0xa3 &&
+        app::physicalShortcutKey(0x12, 0, true) == 0xa5, "Physical modifier decoding failed");
     app::FfmpegProgressParser parser(10);
     require(parser.line("out_time_us=5000000") == 49, "Incorrect media-time percentage");
     require(parser.line("out_time_us=N/A") == 49, "Invalid progress regressed");

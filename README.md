@@ -77,6 +77,8 @@ Domyślne skróty globalne:
 
 Skróty można zmienić w ustawieniach. Przełącznik obok każdego skrótu wyłącza go bez usuwania zapisanej kombinacji; przyciski aplikacji i menu w zasobniku nadal działają. Klawisze nie są blokowane innym aplikacjom.
 
+Aby ustawić kombinację, kliknij skrót **Zapisz klip**, przytrzymaj np. **prawy Shift** i naciśnij **Page Down**. Zapisany `RShift + Page Down` działa tylko po naciśnięciu tej kombinacji — sam Page Down ani lewy Shift jej nie aktywuje. Tak samo rozróżniane są lewy i prawy Ctrl oraz Alt. Starsze skróty zapisane jako ogólny `Shift`, `Ctrl` lub `Alt` pozostają zgodne z obiema stronami.
+
 W sekcji **Powiadomienia zapisu** wybierz jeden z czterech rogów głównego monitora. Po zleceniu zapisu pojawi się cichy toast z procentem przygotowania danych i postępem FFmpeg. Kilka zapisów tworzy stos osobnych powiadomień. Po ukończeniu tekst **Zapisano klip** pozostaje widoczny przez 2 sekundy, a potem płynnie znika. Komunikat błędu pozostaje przez 5 sekund. Powiadomienia nie przejmują fokusu i są wykluczone z przechwytywanego obrazu.
 
 NexPlay może działać w tle w zasobniku systemowym. Zapisane klipy trafiają domyślnie do:
@@ -209,11 +211,19 @@ Pierwszy skrypt buduje ograniczony do potrzeb NexPlay wariant FFmpeg 9.0.1 z ofi
 Tag w formacie `vX.Y.Z`, zgodny z wersją w `CMakeLists.txt`, uruchamia budowanie i testy, a następnie publikuje instalator, ZIP, odpowiadające źródła FFmpeg i SHA256 na GitHubie:
 
 ```powershell
-git tag v0.2.2
-git push origin v0.2.2
+git tag v0.2.5
+git push origin v0.2.5
 ```
 
 Przepływ można ponowić w **Actions**, podając istniejący tag. Istniejące publiczne wydanie nie jest automatycznie nadpisywane. Zwykły CI udostępnia sam plik EXE jako artefakt deweloperski; pełna paczka użytkowa znajduje się w Releases.
+
+Alternatywnie, po lokalnym zbudowaniu i przetestowaniu pełnych paczek oraz wysłaniu commita na `main`, można opublikować je bez korzystania z mocy obliczeniowej GitHub Actions:
+
+```powershell
+./release/Publish-Release.ps1 -PackageDirectory out/dist
+```
+
+Skrypt korzysta z `GH_TOKEN`, `GITHUB_TOKEN` lub skonfigurowanego menedżera poświadczeń Git. Tworzy wersję roboczą, przesyła paczki, sprawdza ich sumy z GitHubem i dopiero wtedy publikuje komplet jako najnowsze wydanie. Nie uruchamia instalatora i nie nadpisuje istniejącego publicznego wydania. Sam push kodu nie udostępnia aktualizacji użytkownikom — potrzebne jest opublikowane wydanie z ZIP-em.
 
 ## Licencja
 

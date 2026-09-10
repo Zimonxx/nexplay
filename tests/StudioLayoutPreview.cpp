@@ -5,6 +5,53 @@
 #include "EditorPlaybackChecks.h"
 
 namespace {
+// Feed only our callback, never inject keys into Windows or install a hook.
+void validateShortcutChords() {
+    AppState state;
+    const HWND window = CreateWindowExW(0, L"STATIC", L"Shortcut fixture", 0,
+        0, 0, 1, 1, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!window) throw std::runtime_error("Cannot create shortcut fixture");
+    struct Cleanup {
+        HWND window;
+        ~Cleanup() { keyboardHookState = nullptr; keyboardHookWindow = nullptr;
+            keyboardKeysDown.fill(false); DestroyWindow(window); }
+    } cleanup{window};
+    keyboardHookState = &state; keyboardHookWindow = window; keyboardKeysDown.fill(false);
+    state.saveHotkeyVk = VK_NEXT;
+    state.saveHotkeyModifiers = nexplay::app::shortcutModifiers(false, false, false, false, false, true);
+    const auto event = [&](UINT key, UINT scan, bool down) {
+        KBDLLHOOKSTRUCT data{}; data.vkCode = key; data.scanCode = scan;
+        passiveKeyboardProcedure(HC_ACTION, down ? WM_KEYDOWN : WM_KEYUP, reinterpret_cast<LPARAM>(&data));
+    };
+    const auto saves = [&] {
+        MSG msg{}; int count = 0;
+        while (PeekMessageW(&msg, window, WM_HOTKEY, WM_HOTKEY, PM_REMOVE)) {
+            if (msg.wParam != saveHotkeyId) throw std::runtime_error("Chord triggered the wrong action");
+            ++count;
+        }
+        return count;
+    };
+    event(VK_NEXT, 0, true); event(VK_NEXT, 0, false);
+    if (saves()) throw std::runtime_error("PageDown alone fired");
+    event(VK_SHIFT, 0x2a, true); event(VK_NEXT, 0, true); event(VK_NEXT, 0, false); event(VK_SHIFT, 0x2a, false);
+    if (saves()) throw std::runtime_error("Left Shift fired a right Shift shortcut");
+    event(VK_SHIFT, 0x36, true);
+    if (saves()) throw std::runtime_error("Modifier alone fired");
+    event(VK_NEXT, 0, true); event(VK_NEXT, 0, true); event(VK_NEXT, 0, true);
+    if (saves() != 1) throw std::runtime_error("Right Shift chord failed or auto-repeated");
+    event(VK_NEXT, 0, false);
+    state.hotkeyCapture = HotkeyCapture::save;
+    event(VK_NEXT, 0, true); event(VK_NEXT, 0, false);
+    if (saves()) throw std::runtime_error("Shortcut fired while configuring a bind");
+    state.hotkeyCapture = HotkeyCapture::none;
+    state.saveHotkeyEnabled = false;
+    event(VK_NEXT, 0, true); event(VK_NEXT, 0, false);
+    if (saves()) throw std::runtime_error("Disabled chord fired");
+    event(VK_SHIFT, 0x36, false);
+    if (hotkeyLabel(state.saveHotkeyModifiers, VK_NEXT) != L"RShift + Page Down")
+        throw std::runtime_error("Physical modifier label is incorrect");
+    std::cout << "Shortcut chords: physical sides, primary-key requirement, repeats and disabled/capture states passed.\n";
+}
 // An isolated, never-shown test window. Route only non-client messages through
 // the production procedure: no app startup, capture, settings, tray or hotkeys.
 LRESULT CALLBACK frameTestProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -266,6 +313,7 @@ int wmain(int argc, wchar_t **argv) {
     int result = 0;
     try {
         validateEditorTrackEdits();
+        validateShortcutChords();
         if (argc == 3) {
             if (std::wstring(argv[2]) == L"--update-check") {
                 nexplay::update::Controller controller(std::filesystem::path(argv[1]) / L"update check test");
@@ -305,6 +353,8 @@ int wmain(int argc, wchar_t **argv) {
             computeLayout(static_cast<float>(size.cx), static_cast<float>(size.cy));
             validateLayout();
             AppState state;
+            state.saveHotkeyVk = VK_NEXT;
+            state.saveHotkeyModifiers = nexplay::app::shortcutModifiers(false, false, false, false, false, true);
             state.stopHotkeyEnabled = false;
             state.status = L"Podgląd interfejsu · dane testowe";
             for (int i = 0; i < 8; ++i) {

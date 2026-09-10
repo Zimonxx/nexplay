@@ -664,11 +664,10 @@ void saveAccentColor(const AppState& state) {
 }
 
 [[nodiscard]] UINT pressedHotkeyModifiers() noexcept {
-    UINT modifiers{};
-    if ((GetKeyState(VK_CONTROL) & 0x8000) != 0) modifiers |= MOD_CONTROL;
-    if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) modifiers |= MOD_SHIFT;
-    if ((GetKeyState(VK_MENU) & 0x8000) != 0) modifiers |= MOD_ALT;
-    return modifiers;
+    const auto down = [](int key) { return (GetKeyState(key) & 0x8000) != 0; };
+    return nexplay::app::shortcutModifiers(down(VK_LCONTROL), down(VK_RCONTROL),
+        down(VK_LMENU), down(VK_RMENU), down(VK_LSHIFT), down(VK_RSHIFT),
+        down(VK_LWIN) || down(VK_RWIN));
 }
 
 [[nodiscard]] std::wstring keyName(const UINT virtualKey) {
@@ -717,9 +716,16 @@ void saveAccentColor(const AppState& state) {
         if (!label.empty()) label += L" + ";
         label += part;
     };
-    if ((modifiers & MOD_CONTROL) != 0) append(L"Ctrl");
-    if ((modifiers & MOD_ALT) != 0) append(L"Alt");
-    if ((modifiers & MOD_SHIFT) != 0) append(L"Shift");
+    const auto modifier = [&](UINT generic, UINT left, UINT right,
+                              const wchar_t* anyName, const wchar_t* leftName, const wchar_t* rightName) {
+        if (modifiers & left) append(leftName);
+        if (modifiers & right) append(rightName);
+        if ((modifiers & generic) && !(modifiers & (left | right))) append(anyName);
+    };
+    modifier(MOD_CONTROL, nexplay::app::leftControl, nexplay::app::rightControl, L"Ctrl", L"LCtrl", L"RCtrl");
+    modifier(MOD_ALT, nexplay::app::leftAlt, nexplay::app::rightAlt, L"Alt", L"LAlt", L"RAlt");
+    modifier(MOD_SHIFT, nexplay::app::leftShift, nexplay::app::rightShift, L"Shift", L"LShift", L"RShift");
+    if (modifiers & MOD_WIN) append(L"Win");
     if (!label.empty()) label += L" + ";
     label += keyName(virtualKey);
     return label;
@@ -730,29 +736,23 @@ LRESULT CALLBACK passiveKeyboardProcedure(
     if (code == HC_ACTION && keyboardHookState != nullptr &&
         keyboardHookWindow != nullptr) {
         const auto* key = reinterpret_cast<KBDLLHOOKSTRUCT*>(parameter);
-        if (key->vkCode < keyboardKeysDown.size()) {
+        const UINT physicalKey = nexplay::app::physicalShortcutKey(key->vkCode, key->scanCode,
+            (key->flags & LLKHF_EXTENDED) != 0);
+        if (physicalKey < keyboardKeysDown.size()) {
             const bool pressed = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
             const bool released = message == WM_KEYUP || message == WM_SYSKEYUP;
             if (released) {
-                keyboardKeysDown[key->vkCode] = false;
+                keyboardKeysDown[physicalKey] = false;
             } else if (pressed) {
-                const bool firstPress = !keyboardKeysDown[key->vkCode];
-                keyboardKeysDown[key->vkCode] = true;
+                const bool firstPress = !keyboardKeysDown[physicalKey];
+                keyboardKeysDown[physicalKey] = true;
                 if (firstPress &&
                     keyboardHookState->hotkeyCapture == HotkeyCapture::none) {
-                    UINT modifiers{};
-                    if (keyboardKeysDown[VK_CONTROL] ||
-                        keyboardKeysDown[VK_LCONTROL] || keyboardKeysDown[VK_RCONTROL]) {
-                        modifiers |= MOD_CONTROL;
-                    }
-                    if (keyboardKeysDown[VK_SHIFT] ||
-                        keyboardKeysDown[VK_LSHIFT] || keyboardKeysDown[VK_RSHIFT]) {
-                        modifiers |= MOD_SHIFT;
-                    }
-                    if (keyboardKeysDown[VK_MENU] ||
-                        keyboardKeysDown[VK_LMENU] || keyboardKeysDown[VK_RMENU]) {
-                        modifiers |= MOD_ALT;
-                    }
+                    const UINT modifiers = nexplay::app::shortcutModifiers(
+                        keyboardKeysDown[VK_LCONTROL], keyboardKeysDown[VK_RCONTROL],
+                        keyboardKeysDown[VK_LMENU], keyboardKeysDown[VK_RMENU],
+                        keyboardKeysDown[VK_LSHIFT], keyboardKeysDown[VK_RSHIFT],
+                        keyboardKeysDown[VK_LWIN] || keyboardKeysDown[VK_RWIN]);
                     if (nexplay::app::shortcutMatches(
                             keyboardHookState->saveHotkeyEnabled, keyboardHookState->saveHotkeyVk,
                             keyboardHookState->saveHotkeyModifiers, key->vkCode, modifiers)) {
@@ -818,10 +818,10 @@ void loadPersistentSettings(AppState& state) {
         readSettingDword(L"ResolutionPreset", 0), resolutionPresets.size() - 1);
     state.saveHotkeyVk = std::clamp<UINT>(readSettingDword(L"SaveHotkeyVk", VK_F8), 1, 254);
     state.saveHotkeyModifiers = readSettingDword(L"SaveHotkeyModifiers", 0) &
-        (MOD_CONTROL | MOD_ALT | MOD_SHIFT);
+        nexplay::app::shortcutModifierMask;
     state.stopHotkeyVk = std::clamp<UINT>(readSettingDword(L"StopHotkeyVk", VK_F9), 1, 254);
     state.stopHotkeyModifiers = readSettingDword(L"StopHotkeyModifiers", 0) &
-        (MOD_CONTROL | MOD_ALT | MOD_SHIFT);
+        nexplay::app::shortcutModifierMask;
     const DWORD accent = readSettingDword(L"AccentColor", 0x6F42FF);
     const D2D1_COLOR_F accentColor{
         static_cast<float>((accent >> 16) & 0xFF) / 255.0F,
@@ -1751,15 +1751,15 @@ void drawSidebar(AppState &state) {
     drawText(state, L"SZYBKI DOSTĘP", {24, windowHeight - 158, 194, windowHeight - 138},
              state.smallFormat.Get(), muted);
     const auto shortcut = [&](float y, const std::wstring &key, const wchar_t *label) {
-        drawText(state, label, {24, y + 7, 96, y + 30}, state.smallFormat.Get(), muted);
-        fillRounded(state, {102, y, 188, y + 30}, 5, field);
-        drawCenteredText(state, key, {102, y, 188, y + 30}, state.smallFormat.Get(), white);
+        drawText(state, label, {24, y, 188, y + 16}, state.smallFormat.Get(), muted);
+        fillRounded(state, {24, y + 18, 188, y + 44}, 5, field);
+        drawCenteredText(state, key, {24, y + 18, 188, y + 44}, state.smallFormat.Get(), white);
     };
-    shortcut(windowHeight - 123,
+    shortcut(windowHeight - 126,
              state.saveHotkeyEnabled ? hotkeyLabel(state.saveHotkeyModifiers, state.saveHotkeyVk)
                                      : L"Wyłączony",
              L"Zapis klipu");
-    shortcut(windowHeight - 81,
+    shortcut(windowHeight - 70,
              state.stopHotkeyEnabled ? hotkeyLabel(state.stopHotkeyModifiers, state.stopHotkeyVk)
                                      : L"Wyłączony",
              L"Zatrzymaj");
@@ -2386,9 +2386,9 @@ void drawSettingsPage(AppState &state) {
         strokeRounded(state, r, 7, listening ? primary : border);
         drawText(state, title, {r.left + 14, r.top + 17, r.right - 210, r.bottom},
                  state.bodyFormat.Get(), enabled ? white : muted);
-        const Rect cap{r.right - 198, r.top + 10, r.right - 64, r.bottom - 10};
+        const Rect cap{r.right - 212, r.top + 10, r.right - 64, r.bottom - 10};
         fillRounded(state, cap, 5, field);
-        drawCenteredText(state, listening ? L"Naciśnij klawisz…" : hotkeyLabel(modifiers, key), cap,
+        drawCenteredText(state, listening ? L"Naciśnij kombinację…" : hotkeyLabel(modifiers, key), cap,
                          state.smallFormat.Get(),
                          listening ? primaryHover
                          : enabled ? white
@@ -2403,7 +2403,7 @@ void drawSettingsPage(AppState &state) {
     hotkey(stopHotkeyRect, HitTarget::stopHotkey, HotkeyCapture::stop, L"Zatrzymaj bufor",
            state.stopHotkeyVk, state.stopHotkeyModifiers, state.stopHotkeyEnabled,
            stopHotkeyToggleRect);
-    drawText(state, L"Kliknij, aby zmienić. Przełącznik wyłącza skrót. Esc anuluje.",
+    drawText(state, L"Przytrzymaj np. RShift i naciśnij Page Down. Esc anuluje.",
              {contentLeft + 20, 638, hotkeysPanelRect.right - 20, 670}, state.smallFormat.Get(),
              muted);
     drawText(state, L"Powiadomienia zapisu",
@@ -3906,7 +3906,7 @@ void beginHotkeyCapture(
     state.hotkeyCapture = capture;
     state.activeField = HitTarget::none;
     SetFocus(window);
-    setStatus(window, state, L"Naciśnij nowy skrót — Esc anuluje");
+    setStatus(window, state, L"Przytrzymaj modyfikator i naciśnij klawisz, np. RShift + Page Down. Esc anuluje.");
 }
 
 void completeHotkeyCapture(
@@ -3915,8 +3915,8 @@ void completeHotkeyCapture(
     if (capture == HotkeyCapture::none) return;
 
     const bool duplicatesOther = capture == HotkeyCapture::save
-        ? virtualKey == state.stopHotkeyVk && modifiers == state.stopHotkeyModifiers
-        : virtualKey == state.saveHotkeyVk && modifiers == state.saveHotkeyModifiers;
+        ? nexplay::app::shortcutsOverlap(virtualKey, modifiers, state.stopHotkeyVk, state.stopHotkeyModifiers)
+        : nexplay::app::shortcutsOverlap(virtualKey, modifiers, state.saveHotkeyVk, state.saveHotkeyModifiers);
     if (duplicatesOther) {
         state.hotkeyCapture = HotkeyCapture::none;
         setStatus(window, state, L"Ten skrót jest już używany w NexPlay");
@@ -4303,7 +4303,8 @@ LRESULT CALLBACK windowProcedure(
         Shell_NotifyIconW(NIM_ADD, &state->tray);
         keyboardHookWindow = window;
         keyboardHookState = state;
-        keyboardKeysDown.fill(false);
+        for (UINT key = 0; key < keyboardKeysDown.size(); ++key)
+            keyboardKeysDown[key] = (GetAsyncKeyState(key) & 0x8000) != 0;
         keyboardHook = SetWindowsHookExW(
             WH_KEYBOARD_LL, passiveKeyboardProcedure, GetModuleHandleW(nullptr), 0);
         SetTimer(window, 1, 16, nullptr);
