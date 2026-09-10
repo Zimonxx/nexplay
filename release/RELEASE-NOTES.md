@@ -1,12 +1,13 @@
-# NexPlay 0.2.6
+# NexPlay 0.2.7
 
 ## Naprawa aktualizatora
 
+- Naprawiono rozpoznawanie argumentu kontroli instalacji z końcową spacją dodawaną przez Windows PowerShell. Sprawdzenie paczki uruchamia teraz wyłącznie test, bez interfejsu, nagrywania i dostępu do ustawień; nie czeka na zakończenie zwykłej aplikacji.
 - Naprawiono błąd `Unexpected package path`: systemowy Windows PowerShell traktował tablicę nazw plików jako jeden wpis, przez co aktualizacja zatrzymywała się po zamknięciu programu.
 - Lista plików jest sprawdzana przed zamknięciem aplikacji. Test pełnej aktualizacji obejmuje teraz kilka plików, biblioteki w podfolderach, kopię zapasową i ponowne uruchomienie.
 - Komunikat błędu pokazuje również przyczynę, a nie tylko lokalizację plików odzyskiwania.
 
-**Przejście z 0.2.3–0.2.5:** stary aktualizator potrafi pobrać paczkę, ale nie podmienić plików. Jednorazowo zakończ NexPlay i wypakuj całą zawartość folderu `NexPlay` z ZIP-a do folderu programu, zastępując pliki aplikacji. Domyślna lokalizacja to `%LOCALAPPDATA%\Programs\NexPlay`. Nie usuwaj folderu ani nagrań. Nie trzeba używać instalatora; od 0.2.6 kolejne aktualizacje działają z aplikacji.
+**Przejście z 0.2.3–0.2.5:** stary aktualizator potrafi pobrać paczkę, ale nie podmienić plików. Jednorazowo zakończ NexPlay i wypakuj całą zawartość folderu `NexPlay` z ZIP-a do folderu programu, zastępując pliki aplikacji. Domyślna lokalizacja to `%LOCALAPPDATA%\Programs\NexPlay`. Nie usuwaj folderu ani nagrań. Nie trzeba używać instalatora. Z 0.2.6 można już przejść na 0.2.7 z aplikacji.
 
 ## Skróty złożone i aktualizacja w aplikacji
 
@@ -50,10 +51,10 @@ Nagrywarka powtórek z NVENC, osobnymi ścieżkami audio aplikacji i mikrofonu o
 
 ## Pobieranie
 
-- **NexPlay-0.2.6-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
-- **NexPlay-0.2.6-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
+- **NexPlay-0.2.7-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
+- **NexPlay-0.2.7-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
 - **SHA256SUMS.txt** — sumy kontrolne paczek.
-- **NexPlay-0.2.6-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
+- **NexPlay-0.2.7-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
 
 FFmpeg i FFprobe są dołączone. Nie trzeba ich osobno instalować ani ustawiać PATH. NexPlay ma własną ikonę w pliku EXE, trayu, pasku zadań i instalatorze. Kod i oryginalna grafika: MIT.
 

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-project(NexPlay VERSION 0.2.6 LANGUAGES CXX RC)
+project(NexPlay VERSION 0.2.7 LANGUAGES CXX RC)
 
 find_program(NEXPLAY_POWERSHELL NAMES pwsh powershell REQUIRED)
 set(NEXPLAY_ICON_FILE "${CMAKE_CURRENT_BINARY_DIR}/brand/nexplay.ico")
@@ -139,6 +139,7 @@ add_executable(save_workflow_tests tests/SaveWorkflowTests.cpp src/app/FfmpegPro
 target_compile_features(save_workflow_tests PRIVATE cxx_std_20)
 target_compile_definitions(save_workflow_tests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_include_directories(save_workflow_tests PRIVATE src)
+target_link_libraries(save_workflow_tests PRIVATE shell32)
 if(MSVC)
     target_compile_options(save_workflow_tests PRIVATE /W4 /permissive- /utf-8)
 endif()

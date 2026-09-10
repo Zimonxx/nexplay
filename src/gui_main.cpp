@@ -10,6 +10,7 @@
 #include "editing/TimelineEdit.h"
 #include "app/FfmpegProgress.h"
 #include "update/UpdateController.h"
+#include "platform/windows/ApplicationArguments.h"
 
 #include <Windows.h>
 #include <windowsx.h>
@@ -4987,7 +4988,7 @@ LRESULT CALLBACK windowProcedure(
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int showCommand) {
     // Package smoke test: no UI, settings, hooks, recording or microphone access.
-    if (commandLine && wcscmp(commandLine, L"--verify-installation") == 0) {
+    if (nexplay::platform::isInstallationVerificationRequest(commandLine)) {
         const auto directory = nexplay::platform::applicationDirectory();
         if (!FindResourceW(instance, MAKEINTRESOURCEW(IDI_NEXPLAY), RT_GROUP_ICON)) return 2;
         if (!FindResourceW(instance, L"UPDATER_SCRIPT", RT_RCDATA)) return 4;

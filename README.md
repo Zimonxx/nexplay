@@ -68,7 +68,7 @@ Wybierz **Pobierz aktualizację**, aby pobrać paczkę ZIP z procentowym postęp
 
 Mechanizm działa dla instalacji użytkownika i rozpakowanej wersji ZIP w zapisywalnym folderze. Nie zmienia nagrań, ustawień ani plików deinstalatora. Przy błędzie podmiany próbuje przywrócić poprzednie pliki; kopie odzyskiwania i status są w `%LOCALAPPDATA%\NexPlay\Updates`. Kontrola SHA-256 wykrywa uszkodzenie pobrania, ale nie zastępuje podpisu cyfrowego wydawcy. Sprawdzanie łączy się z API GitHuba; nie wysyła nagrań ani ustawień.
 
-Wersje 0.2.3–0.2.5 mają błąd odczytu listy plików w systemowym PowerShell: pobieranie działa, ale podmiana zatrzymuje się z komunikatem `Unexpected package path`. Poprawka jest w 0.2.6. Aby przejść ze starszej wersji bez instalatora, zakończ NexPlay i wypakuj **całą zawartość folderu NexPlay z ZIP-a 0.2.6 lub nowszego** do folderu programu, zastępując pliki aplikacji (nie usuwaj folderu ani nagrań). Następnie uruchom `nexplay.exe`. Dla domyślnej instalacji folder programu to `%LOCALAPPDATA%\Programs\NexPlay`. Od 0.2.6 kolejne opublikowane wydania można instalować z aplikacji.
+Wersje 0.2.3–0.2.5 mają błąd odczytu listy plików w systemowym PowerShell: pobieranie działa, ale podmiana zatrzymuje się z komunikatem `Unexpected package path`. Poprawki aktualizatora są zawarte w 0.2.7. Aby przejść ze starszej wersji bez instalatora, zakończ NexPlay i wypakuj **całą zawartość folderu NexPlay z ZIP-a 0.2.7 lub nowszego** do folderu programu, zastępując pliki aplikacji (nie usuwaj folderu ani nagrań). Następnie uruchom `nexplay.exe`. Dla domyślnej instalacji folder programu to `%LOCALAPPDATA%\Programs\NexPlay`. Z 0.2.6 można już przejść na 0.2.7 z aplikacji; kolejne opublikowane wydania również instaluje się w ten sposób.
 
 Domyślne skróty globalne:
 
@@ -211,8 +211,8 @@ Pierwszy skrypt buduje ograniczony do potrzeb NexPlay wariant FFmpeg 9.0.1 z ofi
 Tag w formacie `vX.Y.Z`, zgodny z wersją w `CMakeLists.txt`, uruchamia budowanie i testy, a następnie publikuje instalator, ZIP, odpowiadające źródła FFmpeg i SHA256 na GitHubie:
 
 ```powershell
-git tag v0.2.6
-git push origin v0.2.6
+git tag v0.2.7
+git push origin v0.2.7
 ```
 
 Przepływ można ponowić w **Actions**, podając istniejący tag. Istniejące publiczne wydanie nie jest automatycznie nadpisywane. Zwykły CI udostępnia sam plik EXE jako artefakt deweloperski; pełna paczka użytkowa znajduje się w Releases.

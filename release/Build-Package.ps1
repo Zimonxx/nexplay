@@ -41,6 +41,8 @@ try {
     Copy-Item "$FFmpegDirectory/BUILD-CONFIG.txt" "$package/licenses/FFmpeg-BUILD-CONFIG.txt"
     $check = Start-Process "$package/nexplay.exe" -ArgumentList '--verify-installation' -WindowStyle Hidden -PassThru -Wait
     if ($check.ExitCode -ne 0) { throw "Package smoke test failed: $($check.ExitCode)" }
+    & "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PSScriptRoot/../tests/InstallationCheckTests.ps1" -Executable "$package/nexplay.exe"
+    if ($LASTEXITCODE) { throw 'Windows PowerShell package verification failed' }
     & "$PSScriptRoot/Generate-BrandAssets.ps1" | Out-Host
     $compiler = & "$PSScriptRoot/Get-InnoSetup.ps1"
     $defines = @("/DAppVersion=$version", "/DPackageDir=$package", "/DOutputDir=$OutputDirectory", "/DIconFile=$root/out/brand/nexplay.ico", "/DBrandPng=$root/out/brand/nexplay.png")

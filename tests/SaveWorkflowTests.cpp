@@ -1,6 +1,7 @@
 #include "app/FfmpegProgress.h"
 #include "app/SaveProgress.h"
 #include "app/Shortcut.h"
+#include "platform/windows/ApplicationArguments.h"
 #include "ui/SaveToastModel.h"
 #include <future>
 #include <iostream>
@@ -12,6 +13,15 @@ void require(bool condition, const char *message) {
         throw std::runtime_error(message);
 }
 void tests() {
+    for (const auto* arguments : {L"--verify-installation", L"--verify-installation ",
+             L"  --verify-installation\t ", L"\"--verify-installation\" "}) {
+        require(platform::isInstallationVerificationRequest(arguments), "Package check argument was not recognized");
+    }
+    for (const auto* arguments : {L"", L" ", L"--autostart", L"--verify-installation-other",
+             L"--verify-installation --autostart", L"\"--verify-installation \""}) {
+        require(!platform::isInstallationVerificationRequest(arguments), "Non-check invocation treated as verification");
+    }
+    require(!platform::isInstallationVerificationRequest(nullptr), "Null argument treated as verification");
     require(app::shortcutMatches(true, 119, 0, 119, 0), "Enabled shortcut did not match");
     require(!app::shortcutMatches(false, 119, 0, 119, 0), "Disabled shortcut fired");
     require(!app::shortcutMatches(true, 119, 2, 119, 0), "Wrong modifiers fired");
