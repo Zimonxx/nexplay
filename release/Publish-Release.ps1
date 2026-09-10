@@ -23,7 +23,8 @@ try {
         $hashes[$name] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($name -ne 'SHA256SUMS.txt' -and $sums -cnotcontains ($hashes[$name] + '  ' + $name)) { throw "Package checksum mismatch: $name" }
     }
-    if ([Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $directory $names[0])).ProductVersion -ne $version) { throw 'Installer version mismatch' }
+    # Inno Setup pads this version-resource string with spaces.
+    if ([Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $directory $names[0])).ProductVersion.Trim() -ne $version) { throw 'Installer version mismatch' }
     $token = $env:GH_TOKEN
     if (!$token) { $token = $env:GITHUB_TOKEN }
     if (!$token) {
