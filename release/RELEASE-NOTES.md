@@ -1,11 +1,19 @@
-# NexPlay 0.2.5
+# NexPlay 0.2.6
+
+## Naprawa aktualizatora
+
+- Naprawiono błąd `Unexpected package path`: systemowy Windows PowerShell traktował tablicę nazw plików jako jeden wpis, przez co aktualizacja zatrzymywała się po zamknięciu programu.
+- Lista plików jest sprawdzana przed zamknięciem aplikacji. Test pełnej aktualizacji obejmuje teraz kilka plików, biblioteki w podfolderach, kopię zapasową i ponowne uruchomienie.
+- Komunikat błędu pokazuje również przyczynę, a nie tylko lokalizację plików odzyskiwania.
+
+**Przejście z 0.2.3–0.2.5:** stary aktualizator potrafi pobrać paczkę, ale nie podmienić plików. Jednorazowo zakończ NexPlay i wypakuj całą zawartość folderu `NexPlay` z ZIP-a do folderu programu, zastępując pliki aplikacji. Domyślna lokalizacja to `%LOCALAPPDATA%\Programs\NexPlay`. Nie usuwaj folderu ani nagrań. Nie trzeba używać instalatora; od 0.2.6 kolejne aktualizacje działają z aplikacji.
 
 ## Skróty złożone i aktualizacja w aplikacji
 
 - Ustawianie kombinacji takich jak **RShift + Page Down**, z rozróżnieniem lewego i prawego Shift, Ctrl oraz Alt.
 - Sam Page Down ani LShift + Page Down nie aktywuje skrótu przypisanego do RShift. Przytrzymanie klawisza nie zapisuje wielu klipów.
 - Zachowanie starszych skrótów i wykrywanie konfliktów między skrótem ogólnym a przypisanym do konkretnej strony klawiatury.
-- To wydanie jest dostępne w **Aktualizacje → Sprawdź aktualizacje → Pobierz aktualizację**. Wersje 0.2.3 i 0.2.4 mogą przejść na nie bez instalatora, po krótkim restarcie aplikacji.
+- Kolejne wydania pobierzesz w **Aktualizacje → Sprawdź aktualizacje → Pobierz aktualizację**. Przejście ze starszego aktualizatora opisano powyżej.
 
 ## Stabilny timeline
 
@@ -22,7 +30,7 @@
 - Podmiana plików po potwierdzonym restarcie, bez instalatora. Blokada restartu podczas nagrywania lub eksportu; zachowanie ustawień, nagrań i deinstalatora.
 - Przy błędzie podmiany przywracane są poprzednie pliki; kopie odzyskiwania pozostają w lokalnym folderze NexPlay/Updates.
 
-Wersje 0.2.0–0.2.2 nie mają jeszcze aktualizatora — wymagają jednorazowego użycia nowego instalatora lub pełnego ZIP-a. Kolejne aktualizacje są dostępne z aplikacji.
+Wersje 0.2.0–0.2.2 nie mają jeszcze aktualizatora — wymagają jednorazowego użycia nowego instalatora lub pełnego ZIP-a.
 
 ## Poprawki
 
@@ -42,10 +50,10 @@ Nagrywarka powtórek z NVENC, osobnymi ścieżkami audio aplikacji i mikrofonu o
 
 ## Pobieranie
 
-- **NexPlay-0.2.5-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
-- **NexPlay-0.2.5-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
+- **NexPlay-0.2.6-Setup-windows-x64.exe** — instalator dla bieżącego użytkownika, z opcjonalnym skrótem na pulpicie.
+- **NexPlay-0.2.6-windows-x64.zip** — wersja przenośna; rozpakuj całość i uruchom `NexPlay/nexplay.exe`.
 - **SHA256SUMS.txt** — sumy kontrolne paczek.
-- **NexPlay-0.2.5-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
+- **NexPlay-0.2.6-FFmpeg-source.zip** — dokładne źródła i instrukcja budowania dołączonego FFmpeg (LGPL).
 
 FFmpeg i FFprobe są dołączone. Nie trzeba ich osobno instalować ani ustawiać PATH. NexPlay ma własną ikonę w pliku EXE, trayu, pasku zadań i instalatorze. Kod i oryginalna grafika: MIT.
 

@@ -52,6 +52,19 @@ function Make-Zip([string]$Name, [string[]]$Extras) {
 $valid = Make-Zip 'valid.zip' @()
 $files = @(Expand-Package $valid (Join-Path $root 'expanded'))
 Assert ($files.Count -eq 4) 'Valid package failed'
+$manifest = Join-Path $root 'files.json'
+ConvertTo-Json -InputObject $files | Set-Content -LiteralPath $manifest -Encoding UTF8
+$readFiles = @(Read-PackageFiles $manifest)
+Assert ($readFiles.Count -eq 4) 'JSON filenames collapsed into a single array/string'
+Assert (($readFiles -join '|') -ceq ($files -join '|')) 'JSON filename order or values changed'
+ConvertTo-Json -InputObject @('nexplay.exe') | Set-Content -LiteralPath $manifest -Encoding UTF8
+Assert (@(Read-PackageFiles $manifest).Count -eq 1) 'Single-element JSON array failed'
+foreach ($invalidJson in @('[]', 'null', '"nexplay.exe"', '[null]', '[{}]', '[["nexplay.exe","LICENSE"]]',
+    '["nexplay.exe","NEXPLAY.EXE"]', '["../escape.exe"]', '["nexplay.exe LICENSE"]',
+    '["tools/ffmpeg/bin/a.dll","tools\\ffmpeg\\bin\\a.dll"]')) {
+    [IO.File]::WriteAllText($manifest, $invalidJson)
+    Reject { Read-PackageFiles $manifest } "Invalid file list accepted: $invalidJson"
+}
 Reject { Expand-Package (Make-Zip 'slip.zip' @('NexPlay/../escape.exe')) (Join-Path $root 'slip') } 'Zip slip accepted'
 Reject { Expand-Package (Make-Zip 'duplicate.zip' @('NexPlay/NEXPLAY.EXE')) (Join-Path $root 'duplicate') } 'Case collision accepted'
 Assert (!(Test-Path (Join-Path $root 'escape.exe'))) 'Escaped staging directory'
@@ -112,7 +125,17 @@ public class $class {
     Add-Type -TypeDefinition $code -OutputAssembly (Join-Path $directory 'nexplay.exe') -OutputType WindowsApplication
 }
 @{version='0.2.3'} | ConvertTo-Json | Set-Content (Join-Path $jobDir 'release.json') -Encoding UTF8
-@('nexplay.exe') | ConvertTo-Json | Set-Content (Join-Path $jobDir 'files.json') -Encoding UTF8
+# Use an actual multi-file JSON array: Windows PowerShell 5.1 does not
+# automatically enumerate ConvertFrom-Json arrays inside @(...).
+$applyFiles = @('nexplay.exe','LICENSE','tools/ffmpeg/bin/avcodec-63.dll')
+ConvertTo-Json -InputObject $applyFiles | Set-Content (Join-Path $jobDir 'files.json') -Encoding UTF8
+foreach ($directory in @($app, $stage)) {
+    [void][IO.Directory]::CreateDirectory((Join-Path $directory 'tools/ffmpeg/bin'))
+    $content = if ($directory -eq $app) { 'old' } else { 'new' }
+    foreach ($name in @('LICENSE','tools/ffmpeg/bin/avcodec-63.dll')) {
+        [IO.File]::WriteAllText((Join-Path $directory $name), $content)
+    }
+}
 [IO.File]::WriteAllText((Join-Path $app 'my-recording.mp4'), 'keep')
 $instanceName = 'Local\NexPlay.UpdateTest.' + [guid]::NewGuid().ToString('N')
 $parentProcess = Start-Process (Join-Path $app 'nexplay.exe') -ArgumentList $instanceName -WindowStyle Hidden -PassThru
@@ -140,6 +163,10 @@ try {
     Assert ($helperProcess.ExitCode -eq 0) "Apply helper failed: $status"
     Assert ($status -like 'installed|100|0.2.3*') "Incorrect completion status: $status"
     Assert-Application $app '0.2.3'
+    foreach ($name in @('LICENSE','tools/ffmpeg/bin/avcodec-63.dll')) {
+        Assert ([IO.File]::ReadAllText((Join-Path $app $name)) -eq 'new') "Package file not updated: $name"
+        Assert ([IO.File]::ReadAllText((Join-Path $jobDir "backup/$name")) -eq 'old') "Package file not backed up: $name"
+    }
     $deadline = [DateTime]::UtcNow.AddSeconds(15)
     while (!(Test-Path (Join-Path $app 'restarted')) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 20 }
     Assert ([IO.File]::ReadAllText((Join-Path $app 'restarted')) -eq '0.2.3') 'Updated application did not restart'

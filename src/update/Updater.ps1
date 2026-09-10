@@ -159,6 +159,26 @@ function Assert-Application([string]$Directory, [string]$Version) {
     $info = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $Directory 'nexplay.exe'))
     if ($info.ProductName -cne 'NexPlay' -or $info.ProductVersion -cne $Version) { throw 'Application version mismatch' }
 }
+function Read-PackageFiles([string]$Path) {
+    # Assign first, then enumerate explicitly. In Windows PowerShell 5.1,
+    # @(Get-Content ... | ConvertFrom-Json) wraps the whole JSON array in one
+    # element; binding that to string[] joins all filenames with spaces.
+    $jsonArguments = @{InputObject=(Get-Content -LiteralPath $Path -Raw)}
+    if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('NoEnumerate')) {
+        $jsonArguments.NoEnumerate = $true
+    }
+    $decoded = ConvertFrom-Json @jsonArguments
+    if ($decoded -isnot [array] -or $decoded.Count -lt 1 -or $decoded.Count -gt 256) {
+        throw 'Invalid package file list'
+    }
+    $seen = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $decoded) {
+        if ($name -isnot [string]) { throw 'Invalid package filename' }
+        [void](Get-RelativeName "NexPlay/$name")
+        if (!$seen.Add($name.Replace('\','/'))) { throw 'Duplicate package filename' }
+    }
+    foreach ($name in $decoded) { Write-Output $name }
+}
 function Install-Package([string]$Source, [string]$Destination, [string]$Backup, [string[]]$Files) {
     Assert-PlainPath $Destination
     Assert-PlainPath $Source
@@ -232,6 +252,8 @@ function Apply-Update([string]$Target, [string]$CurrentVersion, [int]$ParentId,
     Assert-Application $Target $CurrentVersion
     Assert-Application (Join-Path $Job 'stage') $release.version
     if ((Convert-Version $release.version) -le (Convert-Version $CurrentVersion)) { throw 'Downgrade rejected' }
+    # Reject a malformed manifest while the old application is still open.
+    $files = @(Read-PackageFiles (Join-Path $Job 'files.json'))
     Write-State 'restarting' 100 $release.version
     if (!$parent.WaitForExit(600000)) { throw 'Application did not close; update cancelled' }
     $parent.Dispose()
@@ -239,7 +261,6 @@ function Apply-Update([string]$Target, [string]$CurrentVersion, [int]$ParentId,
     $guard = New-Object Threading.Mutex($false, $InstanceName, [ref]$created)
     if (!$created) { $guard.Dispose(); throw 'NexPlay was opened again; update cancelled' }
     try {
-        $files = @(Get-Content -LiteralPath (Join-Path $Job 'files.json') -Raw | ConvertFrom-Json)
         Install-Package (Join-Path $Job 'stage') $Target (Join-Path $Job 'backup') $files
         # Installed copies retain their existing uninstaller and uninstall metadata.
         $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{FF9670F0-8335-4E43-A0CD-8D0EB9BF6F42}_is1'
@@ -286,7 +307,7 @@ try {
             if (!$probe.WaitForExit(60000)) { $probe.Kill(); throw 'Package verification timed out' }
             if ($probe.ExitCode -ne 0) { throw 'Package verification failed' }
         } finally { $probe.Dispose() }
-        $files | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Job 'files.json') -Encoding UTF8
+        ConvertTo-Json -InputObject @($files) | Set-Content -LiteralPath (Join-Path $Job 'files.json') -Encoding UTF8
         Write-State 'ready' 100 $release.version
     } else {
         Apply-Update $Target $CurrentVersion $ParentId
@@ -295,7 +316,7 @@ try {
     try { Write-State 'error' 0 '' $_.Exception.Message } catch { }
     if ($Mode -eq 'Apply') {
         Add-Type -AssemblyName System.Windows.Forms
-        [void][Windows.Forms.MessageBox]::Show("Aktualizacja nie powiodla sie. Pliki odzyskiwania i opis bledu: $Job", 'NexPlay - aktualizacja')
+        [void][Windows.Forms.MessageBox]::Show("Aktualizacja nie powiodla sie: $($_.Exception.Message)`n`nPliki odzyskiwania i opis bledu: $Job", 'NexPlay - aktualizacja')
     }
     exit 1
 }
